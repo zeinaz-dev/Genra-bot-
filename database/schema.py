@@ -39,7 +39,7 @@ async def create_tables():
     default_packs = [
         ("CLASH", 24.99, 0),
         ("EMPIRE", 19.99, 0),
-        ("TRAINING", 5.00, 0)
+        ("TRAINING", 9.99, 0)
     ]
 
     for pack in default_packs:
