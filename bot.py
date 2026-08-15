@@ -55,16 +55,21 @@ async def setup_hook():
 
 @bot.event
 async def on_ready():
+    print(f"Logged in as: {bot.user}")
+    print(f"Bot ID: {bot.user.id}")
+
     try:
         synced = await bot.tree.sync()
         print(f"Synced {len(synced)} slash commands")
     except Exception as e:
         print(f"Sync Error: {e}")
 
-    print(f"Logged in as: {bot.user}")
-    print(f"Bot ID: {bot.user.id}")
     print("Genra Bot is Online!")
 
+
+# =========================
+# PING COMMAND
+# =========================
 
 @bot.tree.command(
     name="ping",
@@ -72,10 +77,15 @@ async def on_ready():
 )
 async def ping(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
+
     await interaction.response.send_message(
         f"Pong! {latency}ms"
     )
 
+
+# =========================
+# SETUP COMMAND
+# =========================
 
 @bot.tree.command(
     name="setup",
@@ -121,5 +131,6 @@ if __name__ == "__main__":
     web_thread.start()
 
     bot.run(TOKEN)
+
 
 
