@@ -1,35 +1,44 @@
 import os
 from threading import Thread
+
 from flask import Flask
+import discord
+from discord.ext import commands
+
+from config import TOKEN
+from database.schema import create_tables
+
+
+# =========================
+# RENDER WEB SERVER
+# =========================
 
 app = Flask(__name__)
 
+
 @app.route("/")
 def home():
-    return "Bot is online!"
+    return "Genra Bot is Online!"
+
 
 def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-Thread(target=run_web).start()
 
-
-
-
-
-
-import discord
-from discord.ext import commands
-from config import TOKEN
-from database.schema import create_tables
+# =========================
+# DISCORD BOT
+# =========================
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.guilds = True
 intents.members = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(
+    command_prefix="!",
+    intents=intents
+)
 
 
 async def load_cogs():
@@ -54,16 +63,24 @@ async def on_ready():
 
     print(f"Logged in as: {bot.user}")
     print(f"Bot ID: {bot.user.id}")
-    print("Genra Bot is Online")
+    print("Genra Bot is Online!")
 
 
-@bot.tree.command(name="ping", description="Check bot latency")
+@bot.tree.command(
+    name="ping",
+    description="Check bot latency"
+)
 async def ping(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
-    await interaction.response.send_message(f"Pong! {latency}ms")
+    await interaction.response.send_message(
+        f"Pong! {latency}ms"
+    )
 
 
-@bot.tree.command(name="setup", description="Genra Bot setup check")
+@bot.tree.command(
+    name="setup",
+    description="Genra Bot setup check"
+)
 async def setup(interaction: discord.Interaction):
     embed = discord.Embed(
         title="Genra Bot Setup",
@@ -89,9 +106,20 @@ async def setup(interaction: discord.Interaction):
         inline=False
     )
 
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(
+        embed=embed
+    )
 
 
-bot.run(TOKEN)
+# =========================
+# START
+# =========================
+
+if __name__ == "__main__":
+    web_thread = Thread(target=run_web)
+    web_thread.daemon = True
+    web_thread.start()
+
+    bot.run(TOKEN)
 
 
