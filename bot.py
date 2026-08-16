@@ -36,6 +36,7 @@ def run_web():
 # =========================
 
 intents = discord.Intents.default()
+
 intents.guilds = True
 intents.members = True
 intents.message_content = True
@@ -49,9 +50,7 @@ class GenraBot(commands.Bot):
 
     async def setup_hook(self):
 
-        print("================================")
         print("SETUP HOOK STARTED")
-        print("================================")
 
         # =========================
         # DATABASE
@@ -59,12 +58,11 @@ class GenraBot(commands.Bot):
 
         try:
             await create_tables()
-            print("DATABASE: OK")
+            print("Database ready.")
 
         except Exception as error:
-            print("DATABASE ERROR:")
-            print(type(error).__name__)
-            print(repr(error))
+            print("Database error:")
+            print(f"{type(error).__name__}: {error}")
 
         # =========================
         # LOAD COGS
@@ -77,55 +75,46 @@ class GenraBot(commands.Bot):
 
         for cog in cogs:
 
-            print("--------------------------------")
-            print(f"LOADING COG: {cog}")
+            print(f"Loading: {cog}")
 
             try:
-
                 await self.load_extension(cog)
-
-                print(f"COG LOADED SUCCESSFULLY: {cog}")
+                print(f"Loaded: {cog}")
 
             except Exception as error:
-
-                print(f"COG FAILED: {cog}")
-                print(f"ERROR TYPE: {type(error).__name__}")
-                print(f"ERROR: {repr(error)}")
+                print(f"FAILED: {cog}")
+                print(
+                    f"{type(error).__name__}: {error}"
+                )
 
         # =========================
         # SYNC COMMANDS
         # =========================
 
-        print("--------------------------------")
-        print("STARTING COMMAND SYNC")
+        print("Starting command sync...")
 
         try:
 
             synced = await self.tree.sync()
 
             print(
-                f"COMMANDS SYNCED: {len(synced)}"
+                f"Synced {len(synced)} commands."
             )
 
             for command in synced:
 
                 print(
-                    f"COMMAND: /{command.name}"
+                    f"Command: /{command.name}"
                 )
 
         except Exception as error:
 
-            print("COMMAND SYNC FAILED")
+            print("SYNC ERROR:")
             print(
-                f"ERROR TYPE: {type(error).__name__}"
-            )
-            print(
-                f"ERROR: {repr(error)}"
+                f"{type(error).__name__}: {error}"
             )
 
-        print("================================")
         print("SETUP HOOK FINISHED")
-        print("================================")
 
 
 # =========================
@@ -145,14 +134,49 @@ bot = GenraBot(
 @bot.event
 async def on_ready():
 
-    print("================================")
+    print("==============================")
     print("GENRA BOT ONLINE")
-    print("================================")
+    print("==============================")
     print(f"Logged in as: {bot.user}")
     print(f"Bot ID: {bot.user.id}")
-    print("================================")
+    print("Genra Bot is ready!")
+    print("==============================")
 
 
 # =========================
 # PING
 # =========================
+
+@bot.tree.command(
+    name="ping",
+    description="Check bot latency"
+)
+async def ping(
+    interaction: discord.Interaction
+):
+
+    latency = round(
+        bot.latency * 1000
+    )
+
+    await interaction.response.send_message(
+        f"🏓 Pong! {latency}ms"
+    )
+
+
+# =========================
+# START BOT
+# =========================
+
+if __name__ == "__main__":
+
+    print("STARTING GENRA BOT")
+
+    web_thread = Thread(
+        target=run_web,
+        daemon=True
+    )
+
+    web_thread.start()
+
+    bot.run(TOKEN)
