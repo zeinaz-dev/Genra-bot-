@@ -1,4 +1,3 @@
-
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
@@ -14,39 +13,24 @@ from database.schema import (
     delete_schedule
 )
 
-from config import STAFF_ROLE_IDS
-
 
 KSA = ZoneInfo("Asia/Riyadh")
 
 
 def is_staff(member: discord.Member):
-
-    if member.guild_permissions.administrator:
-        return True
-
-    if not STAFF_ROLE_IDS:
-        return False
-
-    return any(
-        role.id in STAFF_ROLE_IDS
-        for role in member.roles
-    )
+    return member.guild_permissions.administrator
 
 
 def format_datetime(dt):
-
     return dt.strftime("%d/%m/%Y %H:%M KSA")
 
 
 class ScheduleSetupView(discord.ui.View):
 
     def __init__(self, cog):
-
         super().__init__(timeout=300)
 
         self.cog = cog
-
         self.channels = []
         self.role = None
 
@@ -64,11 +48,10 @@ class ScheduleSetupView(discord.ui.View):
         interaction: discord.Interaction,
         select: discord.ui.ChannelSelect
     ):
-
         self.channels = select.values
 
         await interaction.response.send_message(
-            f"Selected {len(self.channels)} channel(s).",
+            f"✅ Selected {len(self.channels)} channel(s).",
             ephemeral=True
         )
 
@@ -83,11 +66,10 @@ class ScheduleSetupView(discord.ui.View):
         interaction: discord.Interaction,
         select: discord.ui.RoleSelect
     ):
-
         self.role = select.values[0]
 
         await interaction.response.send_message(
-            f"Selected role: {self.role.mention}",
+            f"✅ Selected role: {self.role.mention}",
             ephemeral=True
         )
 
@@ -100,23 +82,18 @@ class ScheduleSetupView(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button
     ):
-
         if not self.channels:
-
             await interaction.response.send_message(
                 "❌ Please select at least one registration channel.",
                 ephemeral=True
             )
-
             return
 
         if not self.role:
-
             await interaction.response.send_message(
                 "❌ Please select a role.",
                 ephemeral=True
             )
-
             return
 
         modal = ScheduleModal(
@@ -131,7 +108,6 @@ class ScheduleSetupView(discord.ui.View):
 class ScheduleModal(discord.ui.Modal):
 
     def __init__(self, cog, channels, role):
-
         super().__init__(
             title="Create Registration Schedule"
         )
@@ -180,9 +156,7 @@ class ScheduleModal(discord.ui.Modal):
         self,
         interaction: discord.Interaction
     ):
-
         try:
-
             open_date = datetime.strptime(
                 self.date.value.strip(),
                 "%d/%m/%Y"
@@ -203,7 +177,6 @@ class ScheduleModal(discord.ui.Modal):
             )
 
         except ValueError:
-
             await interaction.response.send_message(
                 "❌ Invalid date/time.\n\n"
                 "Use:\n"
@@ -211,7 +184,6 @@ class ScheduleModal(discord.ui.Modal):
                 "`HH:MM`",
                 ephemeral=True
             )
-
             return
 
         close_datetime = None
@@ -219,7 +191,6 @@ class ScheduleModal(discord.ui.Modal):
         if self.close_time.value.strip():
 
             try:
-
                 close_time = datetime.strptime(
                     self.close_time.value.strip(),
                     "%H:%M"
@@ -235,37 +206,34 @@ class ScheduleModal(discord.ui.Modal):
                 )
 
                 if close_datetime <= open_datetime:
-
                     await interaction.response.send_message(
                         "❌ Closing time must be after opening time.",
                         ephemeral=True
                     )
-
                     return
 
             except ValueError:
-
                 await interaction.response.send_message(
                     "❌ Invalid closing time. Use `HH:MM`.",
                     ephemeral=True
                 )
-
                 return
 
         now = datetime.now(KSA)
 
         if open_datetime <= now:
-
             await interaction.response.send_message(
                 "❌ The opening date/time must be in the future.",
                 ephemeral=True
             )
-
             return
 
         schedule_id = create_schedule(
             name=self.name.value.strip(),
-            channel_ids=[channel.id for channel in self.channels],
+            channel_ids=[
+                channel.id
+                for channel in self.channels
+            ],
             role_id=self.role.id,
             open_datetime=open_datetime.isoformat(),
             close_datetime=(
@@ -335,13 +303,10 @@ class ScheduleModal(discord.ui.Modal):
 class RegistrationScheduler(commands.Cog):
 
     def __init__(self, bot):
-
         self.bot = bot
-
         self.scheduler_loop.start()
 
     def cog_unload(self):
-
         self.scheduler_loop.cancel()
 
     @tasks.loop(seconds=30)
@@ -356,10 +321,7 @@ class RegistrationScheduler(commands.Cog):
 
         for schedule in schedules:
 
-            schedule_id = schedule["id"]
-
             try:
-
                 open_datetime = datetime.fromisoformat(
                     schedule["open_datetime"]
                 )
@@ -386,484 +348,9 @@ class RegistrationScheduler(commands.Cog):
                     schedule["status"] == "scheduled"
                     and now >= open_datetime
                 ):
-
                     await self.open_registration(schedule)
 
                 elif (
                     schedule["status"] == "open"
                     and close_datetime
                     and now >= close_datetime
-                ):
-
-                    await self.close_registration(schedule)
-
-            except Exception as error:
-
-                print(
-                    f"Scheduler error for schedule "
-                    f"{schedule_id}: {error}"
-                )
-
-    @scheduler_loop.before_loop
-    async def before_scheduler(self):
-
-        await self.bot.wait_until_ready()
-
-    async def open_registration(self, schedule):
-
-        guild_channels = []
-
-        for channel_id in schedule["channel_ids"].split(","):
-
-            channel = self.bot.get_channel(
-                int(channel_id)
-            )
-
-            if channel:
-
-                guild_channels.append(channel)
-
-        if not guild_channels:
-
-            print(
-                f"No channels found for schedule "
-                f"{schedule['id']}"
-            )
-
-            return
-
-        role = None
-
-        guild = guild_channels[0].guild
-
-        role = guild.get_role(
-            int(schedule["role_id"])
-        )
-
-        if not role:
-
-            print(
-                f"Role not found for schedule "
-                f"{schedule['id']}"
-            )
-
-            return
-
-        for channel in guild_channels:
-
-            try:
-
-                await channel.set_permissions(
-                    guild.default_role,
-                    send_messages=False
-                )
-
-                await channel.set_permissions(
-                    role,
-                    view_channel=True,
-                    send_messages=True
-                )
-
-                message = schedule["message"]
-
-                message = message.replace(
-                    "{role}",
-                    role.mention
-                )
-
-                message = message.replace(
-                    "{name}",
-                    schedule["name"]
-                )
-
-                channel_mentions = " ".join(
-                    channel.mention
-                    for channel in guild_channels
-                )
-
-                message = message.replace(
-                    "{channels}",
-                    channel_mentions
-                )
-
-                await channel.send(
-                    content=f"{role.mention}\n{message}",
-                    allowed_mentions=discord.AllowedMentions(
-                        roles=[role]
-                    )
-                )
-
-            except Exception as error:
-
-                print(
-                    f"Could not open channel "
-                    f"{channel.id}: {error}"
-                )
-
-        update_status(
-            schedule["id"],
-            "open"
-        )
-
-        print(
-            f"Registration {schedule['id']} opened."
-        )
-
-    async def close_registration(self, schedule):
-
-        guild_channels = []
-
-        for channel_id in schedule["channel_ids"].split(","):
-
-            channel = self.bot.get_channel(
-                int(channel_id)
-            )
-
-            if channel:
-
-                guild_channels.append(channel)
-
-        if not guild_channels:
-
-            return
-
-        guild = guild_channels[0].guild
-
-        role = guild.get_role(
-            int(schedule["role_id"])
-        )
-
-        for channel in guild_channels:
-
-            try:
-
-                if role:
-
-                    await channel.set_permissions(
-                        role,
-                        send_messages=False
-                    )
-
-                await channel.send(
-                    "🔒 **Registration is now CLOSED.**"
-                )
-
-            except Exception as error:
-
-                print(
-                    f"Could not close channel "
-                    f"{channel.id}: {error}"
-                )
-
-        update_status(
-            schedule["id"],
-            "closed"
-        )
-
-        print(
-            f"Registration {schedule['id']} closed."
-        )
-
-    @app_commands.command(
-        name="schedule",
-        description="Schedule a registration opening."
-    )
-    async def schedule(
-        self,
-        interaction: discord.Interaction
-    ):
-
-        if not isinstance(
-            interaction.user,
-            discord.Member
-        ):
-
-            return
-
-        if not is_staff(interaction.user):
-
-            await interaction.response.send_message(
-                "❌ You do not have permission to use this command.",
-                ephemeral=True
-            )
-
-            return
-
-        view = ScheduleSetupView(self)
-
-        embed = discord.Embed(
-            title="📅 Registration Scheduler",
-            description=(
-                "Configure the registration below.\n\n"
-                "1️⃣ Select one or more channels\n"
-                "2️⃣ Select the role to mention\n"
-                "3️⃣ Press **Continue**\n"
-                "4️⃣ Enter the date, KSA time and message"
-            ),
-            color=discord.Color.blurple()
-        )
-
-        await interaction.response.send_message(
-            embed=embed,
-            view=view,
-            ephemeral=True
-        )
-
-    @app_commands.command(
-        name="schedules",
-        description="View scheduled registrations."
-    )
-    async def schedules(
-        self,
-        interaction: discord.Interaction
-    ):
-
-        if not isinstance(
-            interaction.user,
-            discord.Member
-        ):
-
-            return
-
-        if not is_staff(interaction.user):
-
-            await interaction.response.send_message(
-                "❌ You do not have permission to use this command.",
-                ephemeral=True
-            )
-
-            return
-
-        schedules = get_active_schedules()
-
-        if not schedules:
-
-            await interaction.response.send_message(
-                "📭 There are no active or scheduled registrations.",
-                ephemeral=True
-            )
-
-            return
-
-        embed = discord.Embed(
-            title="📅 Registration Schedules",
-            color=discord.Color.blurple()
-        )
-
-        for schedule in schedules:
-
-            open_datetime = datetime.fromisoformat(
-                schedule["open_datetime"]
-            )
-
-            close_datetime = None
-
-            if schedule["close_datetime"]:
-
-                close_datetime = datetime.fromisoformat(
-                    schedule["close_datetime"]
-                )
-
-            status = schedule["status"].upper()
-
-            value = (
-                f"**Status:** {status}\n"
-                f"**Open:** {format_datetime(open_datetime)}\n"
-            )
-
-            if close_datetime:
-
-                value += (
-                    f"**Close:** "
-                    f"{format_datetime(close_datetime)}\n"
-                )
-
-            value += (
-                f"**Schedule ID:** `{schedule['id']}`"
-            )
-
-            embed.add_field(
-                name=schedule["name"],
-                value=value,
-                inline=False
-            )
-
-        await interaction.response.send_message(
-            embed=embed,
-            ephemeral=True
-        )
-
-    @app_commands.command(
-        name="cancel_schedule",
-        description="Cancel a scheduled registration."
-    )
-    @app_commands.describe(
-        schedule_id="The schedule ID"
-    )
-    async def cancel_schedule(
-        self,
-        interaction: discord.Interaction,
-        schedule_id: int
-    ):
-
-        if not isinstance(
-            interaction.user,
-            discord.Member
-        ):
-
-            return
-
-        if not is_staff(interaction.user):
-
-            await interaction.response.send_message(
-                "❌ You do not have permission to use this command.",
-                ephemeral=True
-            )
-
-            return
-
-        schedule = get_schedule(schedule_id)
-
-        if not schedule:
-
-            await interaction.response.send_message(
-                "❌ Schedule not found.",
-                ephemeral=True
-            )
-
-            return
-
-        if schedule["status"] == "closed":
-
-            await interaction.response.send_message(
-                "❌ This registration is already closed.",
-                ephemeral=True
-            )
-
-            return
-
-        delete_schedule(schedule_id)
-
-        await interaction.response.send_message(
-            f"✅ Schedule `{schedule_id}` has been cancelled.",
-            ephemeral=True
-        )
-
-    @app_commands.command(
-        name="open_now",
-        description="Open a scheduled registration immediately."
-    )
-    @app_commands.describe(
-        schedule_id="The schedule ID"
-    )
-    async def open_now(
-        self,
-        interaction: discord.Interaction,
-        schedule_id: int
-    ):
-
-        if not isinstance(
-            interaction.user,
-            discord.Member
-        ):
-
-            return
-
-        if not is_staff(interaction.user):
-
-            await interaction.response.send_message(
-                "❌ You do not have permission to use this command.",
-                ephemeral=True
-            )
-
-            return
-
-        schedule = get_schedule(schedule_id)
-
-        if not schedule:
-
-            await interaction.response.send_message(
-                "❌ Schedule not found.",
-                ephemeral=True
-            )
-
-            return
-
-        if schedule["status"] == "open":
-
-            await interaction.response.send_message(
-                "⚠️ This registration is already open.",
-                ephemeral=True
-            )
-
-            return
-
-        await self.open_registration(schedule)
-
-        await interaction.response.send_message(
-            f"✅ Registration `{schedule_id}` opened.",
-            ephemeral=True
-        )
-
-    @app_commands.command(
-        name="close_now",
-        description="Close a registration immediately."
-    )
-    @app_commands.describe(
-        schedule_id="The schedule ID"
-    )
-    async def close_now(
-        self,
-        interaction: discord.Interaction,
-        schedule_id: int
-    ):
-
-        if not isinstance(
-            interaction.user,
-            discord.Member
-        ):
-
-            return
-
-        if not is_staff(interaction.user):
-
-            await interaction.response.send_message(
-                "❌ You do not have permission to use this command.",
-                ephemeral=True
-            )
-
-            return
-
-        schedule = get_schedule(schedule_id)
-
-        if not schedule:
-
-            await interaction.response.send_message(
-                "❌ Schedule not found.",
-                ephemeral=True
-            )
-
-            return
-
-        if schedule["status"] != "open":
-
-            await interaction.response.send_message(
-                "⚠️ This registration is not currently open.",
-                ephemeral=True
-            )
-
-            return
-
-        await self.close_registration(schedule)
-
-        await interaction.response.send_message(
-            f"🔒 Registration `{schedule_id}` closed.",
-            ephemeral=True
-        )
-
-
-async def setup(bot):
-
-    await bot.add_cog(
-        RegistrationScheduler(bot)
-    )
