@@ -11,6 +11,13 @@ from database.schema import create_tables
 
 
 # =========================
+# SERVER ID
+# =========================
+
+GUILD_ID = 1142434590980571217
+
+
+# =========================
 # RENDER WEB SERVER
 # =========================
 
@@ -19,18 +26,11 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-
     return "Genra Bot is Online!"
 
 
 def run_web():
-
-    port = int(
-        os.environ.get(
-            "PORT",
-            10000
-        )
-    )
+    port = int(os.environ.get("PORT", 10000))
 
     app.run(
         host="0.0.0.0",
@@ -71,19 +71,11 @@ async def load_cogs():
     for cog in cogs:
 
         try:
-
             await bot.load_extension(cog)
-
-            print(
-                f"Loaded: {cog}"
-            )
+            print(f"Loaded: {cog}")
 
         except Exception as error:
-
-            print(
-                f"FAILED: {cog}"
-            )
-
+            print(f"FAILED: {cog}")
             print(error)
 
 
@@ -95,27 +87,25 @@ async def load_cogs():
 async def setup_hook():
 
     try:
-
         await create_tables()
-
-        print(
-            "Database ready."
-        )
+        print("Database ready.")
 
     except Exception as error:
-
-        print(
-            f"Database error: {error}"
-        )
+        print(f"Database error: {error}")
 
     await load_cogs()
 
     try:
 
-        synced = await bot.tree.sync()
+        guild = discord.Object(id=GUILD_ID)
+
+        synced = await bot.tree.sync(
+            guild=guild
+        )
 
         print(
-            f"Synced {len(synced)} slash commands."
+            f"Synced {len(synced)} commands "
+            f"to server {GUILD_ID}"
         )
 
         for command in synced:
@@ -127,7 +117,7 @@ async def setup_hook():
     except Exception as error:
 
         print(
-            f"SYNC ERROR: {error}"
+            f"GUILD SYNC ERROR: {error}"
         )
 
 
@@ -138,33 +128,13 @@ async def setup_hook():
 @bot.event
 async def on_ready():
 
-    print(
-        "=============================="
-    )
-
-    print(
-        "GENRA BOT ONLINE"
-    )
-
-    print(
-        "=============================="
-    )
-
-    print(
-        f"Logged in as: {bot.user}"
-    )
-
-    print(
-        f"Bot ID: {bot.user.id}"
-    )
-
-    print(
-        "Genra Bot is ready!"
-    )
-
-    print(
-        "=============================="
-    )
+    print("==============================")
+    print("GENRA BOT ONLINE")
+    print("==============================")
+    print(f"Logged in as: {bot.user}")
+    print(f"Bot ID: {bot.user.id}")
+    print("Genra Bot is ready!")
+    print("==============================")
 
 
 # =========================
