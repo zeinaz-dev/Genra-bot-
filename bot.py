@@ -42,7 +42,7 @@ def run_web():
     app.run(
         host="0.0.0.0",
         port=port,
-        use_reloader=False
+        use_reloader=False,
     )
 
 
@@ -51,7 +51,6 @@ def run_web():
 # =========================
 
 intents = discord.Intents.default()
-
 intents.message_content = True
 intents.members = True
 
@@ -62,12 +61,12 @@ intents.members = True
 
 bot = commands.Bot(
     command_prefix="!",
-    intents=intents
+    intents=intents,
 )
 
 
 # =========================
-# PING
+# PREFIX PING
 # =========================
 
 @bot.command(name="ping")
@@ -88,10 +87,10 @@ async def ping(ctx):
 
 @bot.tree.command(
     name="ping",
-    description="Check if the bot is online."
+    description="Check if the bot is online.",
 )
 async def slash_ping(
-    interaction: discord.Interaction
+    interaction: discord.Interaction,
 ):
 
     latency = round(
@@ -100,7 +99,7 @@ async def slash_ping(
 
     await interaction.response.send_message(
         f"🏓 Pong! `{latency}ms`",
-        ephemeral=True
+        ephemeral=True,
     )
 
 
@@ -115,6 +114,8 @@ async def on_ready():
     print(f"✅ Logged in as: {bot.user}")
     print(f"🆔 ID: {bot.user.id}")
     print(f"🌐 Servers: {len(bot.guilds)}")
+
+    print("🔄 Syncing slash commands...")
 
     try:
 
@@ -139,7 +140,7 @@ async def on_ready():
 
 
 # =========================
-# LOAD COG
+# LOAD COGS
 # =========================
 
 async def load_extensions():
@@ -171,6 +172,8 @@ async def load_extensions():
 
 async def start_bot():
 
+    print("🗄️ Initializing database...")
+
     try:
 
         create_tables()
@@ -184,6 +187,8 @@ async def start_bot():
         print(
             f"❌ Database error: {error!r}"
         )
+
+    print("📦 Loading extensions...")
 
     await load_extensions()
 
@@ -202,7 +207,7 @@ def main():
 
     web_thread = threading.Thread(
         target=run_web,
-        daemon=True
+        daemon=True,
     )
 
     web_thread.start()
@@ -220,7 +225,7 @@ def main():
     except KeyboardInterrupt:
 
         print(
-            "Bot stopped."
+            "🛑 Bot stopped."
         )
 
     except Exception as error:
