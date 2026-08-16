@@ -143,7 +143,7 @@ class ScheduleModal(discord.ui.Modal):
 
     opening_message = discord.ui.TextInput(
         label="Opening message",
-        placeholder="Registration is now OPEN!",
+        placeholder="Write your opening message here",
         style=discord.TextStyle.paragraph,
         required=True,
         max_length=1800
@@ -270,6 +270,157 @@ class ScheduleModal(discord.ui.Modal):
 
         await interaction.response.send_message(
             embed=embed,
+            ephemeral=True
+        )
+
+
+class CloseRegistrationView(discord.ui.View):
+
+    def __init__(self, cog):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.channels = []
+        self.role = None
+
+    @discord.ui.select(
+        cls=discord.ui.ChannelSelect,
+        channel_types=[discord.ChannelType.text],
+        placeholder="Select channels to close",
+        min_values=1,
+        max_values=25
+    )
+    async def channel_select(
+        self,
+        interaction: discord.Interaction,
+        select: discord.ui.ChannelSelect
+    ):
+        self.channels = list(select.values)
+
+        await interaction.response.send_message(
+            f"✅ Selected {len(self.channels)} channel(s).",
+            ephemeral=True
+        )
+
+    @discord.ui.select(
+        cls=discord.ui.RoleSelect,
+        placeholder="Select the role to mention",
+        min_values=1,
+        max_values=1
+    )
+    async def role_select(
+        self,
+        interaction: discord.Interaction,
+        select: discord.ui.RoleSelect
+    ):
+        self.role = select.values[0]
+
+        await interaction.response.send_message(
+            f"✅ Selected role: {self.role.mention}",
+            ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="Continue",
+        style=discord.ButtonStyle.red
+    )
+    async def continue_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+        if not self.channels:
+            await interaction.response.send_message(
+                "❌ Select at least one channel.",
+                ephemeral=True
+            )
+            return
+
+        if self.role is None:
+            await interaction.response.send_message(
+                "❌ Select a role to mention.",
+                ephemeral=True
+            )
+            return
+
+        modal = CloseRegistrationModal(
+            self.cog,
+            self.channels,
+            self.role
+        )
+
+        await interaction.response.send_modal(modal)
+
+
+class CloseRegistrationModal(discord.ui.Modal):
+
+    def __init__(self, cog, channels, role):
+        super().__init__(
+            title="Close Registration"
+        )
+
+        self.cog = cog
+        self.channels = channels
+        self.role = role
+
+    closing_message = discord.ui.TextInput(
+        label="Closing message",
+        placeholder="Write your closing message here",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1800
+    )
+
+    async def on_submit(
+        self,
+        interaction: discord.Interaction
+    ):
+        await interaction.response.defer(
+            ephemeral=True
+        )
+
+        success = 0
+
+        for channel in self.channels:
+
+            try:
+                await channel.set_permissions(
+                    self.role,
+                    send_messages=False
+                )
+
+                message = self.closing_message.value.strip()
+
+                message = message.replace(
+                    "{role}",
+                    self.role.mention
+                )
+
+                message = message.replace(
+                    "{channels}",
+                    " ".join(
+                        channel.mention
+                        for channel in self.channels
+                    )
+                )
+
+                await channel.send(
+                    content=f"{self.role.mention}\n{message}",
+                    allowed_mentions=discord.AllowedMentions(
+                        roles=[self.role]
+                    )
+                )
+
+                success += 1
+
+            except Exception as error:
+                print(
+                    f"Error closing channel "
+                    f"{channel.id}: {error}"
+                )
+
+        await interaction.followup.send(
+            f"🔒 Registration closed in "
+            f"**{success}/{len(self.channels)}** channel(s).",
             ephemeral=True
         )
 
@@ -437,18 +588,23 @@ class RegistrationScheduler(commands.Cog):
             int(schedule["role_id"])
         )
 
+        if role is None:
+            return
+
         for channel in channels:
 
             try:
-
-                if role is not None:
-                    await channel.set_permissions(
-                        role,
-                        send_messages=False
-                    )
+                await channel.set_permissions(
+                    role,
+                    send_messages=False
+                )
 
                 await channel.send(
-                    "🔒 **Registration is now CLOSED.**"
+                    content=f"{role.mention}\n"
+                            f"🔒 **Registration is now CLOSED.**",
+                    allowed_mentions=discord.AllowedMentions(
+                        roles=[role]
+                    )
                 )
 
             except Exception as error:
@@ -493,10 +649,10 @@ class RegistrationScheduler(commands.Cog):
             title="📅 Registration Scheduler",
             description=(
                 "Create a new registration schedule.\n\n"
-                "**Step 1:** Select one or more channels.\n"
-                "**Step 2:** Select the role to mention.\n"
-                "**Step 3:** Press Continue.\n"
-                "**Step 4:** Enter the date, KSA times and message."
+                "1️⃣ Select one or more channels\n"
+                "2️⃣ Select the role to mention\n"
+                "3️⃣ Press **Continue**\n"
+                "4️⃣ Enter the date, KSA times and message"
             ),
             color=discord.Color.blurple()
         )
@@ -504,6 +660,45 @@ class RegistrationScheduler(commands.Cog):
         await interaction.response.send_message(
             embed=embed,
             view=ScheduleView(self),
+            ephemeral=True
+        )
+
+    @app_commands.command(
+        name="close_registration",
+        description="Manually close a registration."
+    )
+    async def close_registration_command(
+        self,
+        interaction: discord.Interaction
+    ):
+
+        if not isinstance(
+            interaction.user,
+            discord.Member
+        ):
+            return
+
+        if not is_admin(interaction.user):
+            await interaction.response.send_message(
+                "❌ Only members with **Administrator** permission "
+                "can use this command.",
+                ephemeral=True
+            )
+            return
+
+        embed = discord.Embed(
+            title="🔒 Close Registration",
+            description=(
+                "Select the registration channels you want to close.\n\n"
+                "Then select the role to mention and write your "
+                "custom closing message."
+            ),
+            color=discord.Color.red()
+        )
+
+        await interaction.response.send_message(
+            embed=embed,
+            view=CloseRegistrationView(self),
             ephemeral=True
         )
 
