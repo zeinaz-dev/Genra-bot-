@@ -29,6 +29,10 @@ async def create_tables():
     connection = sqlite3.connect(DATABASE)
     cursor = connection.cursor()
 
+    # =========================
+    # PACKS
+    # =========================
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS packs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,6 +41,10 @@ async def create_tables():
             max_teams INTEGER DEFAULT 0
         )
     """)
+
+    # =========================
+    # SUBSCRIBERS
+    # =========================
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS subscribers (
@@ -47,6 +55,10 @@ async def create_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
+    # =========================
+    # TEAMS
+    # =========================
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS teams (
@@ -86,6 +98,10 @@ async def create_tables():
         "TEXT"
     )
 
+    # =========================
+    # ROLE HISTORY
+    # =========================
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS role_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -96,6 +112,43 @@ async def create_tables():
             UNIQUE(discord_id, role_id)
         )
     """)
+
+    # =========================
+    # SCHEDULES
+    # =========================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS schedules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pack TEXT NOT NULL,
+            date TEXT NOT NULL,
+            open_time TEXT NOT NULL,
+            close_time TEXT NOT NULL,
+            created_by INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            opened_at TEXT,
+            closed_at TEXT
+        )
+    """)
+
+    # =========================
+    # SCHEDULE CHANNELS
+    # =========================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS schedule_channels (
+            schedule_id INTEGER NOT NULL,
+            channel_id INTEGER NOT NULL,
+            PRIMARY KEY (schedule_id, channel_id),
+            FOREIGN KEY (schedule_id)
+                REFERENCES schedules(id)
+                ON DELETE CASCADE
+        )
+    """)
+
+    # =========================
+    # DEFAULT PACKS
+    # =========================
 
     default_packs = [
         ("CLASH", 24.99, 0),
