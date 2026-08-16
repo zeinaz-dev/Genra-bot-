@@ -2,6 +2,7 @@ import os
 from threading import Thread
 
 from flask import Flask
+
 import discord
 from discord.ext import commands
 
@@ -53,27 +54,36 @@ bot = commands.Bot(
 
 async def load_cogs():
 
-    await bot.load_extension(
-        "cogs.packs"
-    )
-
-    await bot.load_extension(
-        "cogs.subscribers"
-    )
-
-    await bot.load_extension(
+    cogs = [
+        "cogs.packs",
+        "cogs.subscribers",
         "cogs.teams"
-    )
+    ]
+
+    for cog in cogs:
+
+        try:
+            await bot.load_extension(cog)
+            print(f"Loaded: {cog}")
+
+        except Exception as error:
+            print(f"FAILED: {cog}")
+            print(error)
 
 
 # =========================
-# SETUP HOOK
+# BOT SETUP
 # =========================
 
 @bot.event
 async def setup_hook():
 
-    await create_tables()
+    try:
+        await create_tables()
+        print("Database ready.")
+
+    except Exception as error:
+        print(f"Database error: {error}")
 
     await load_cogs()
 
@@ -82,13 +92,18 @@ async def setup_hook():
         synced = await bot.tree.sync()
 
         print(
-            f"Synced {len(synced)} slash commands"
+            f"Synced {len(synced)} slash commands."
         )
+
+        for command in synced:
+            print(
+                f"Command loaded: /{command.name}"
+            )
 
     except Exception as error:
 
         print(
-            f"Command sync error: {error}"
+            f"SYNC ERROR: {error}"
         )
 
 
@@ -130,7 +145,7 @@ async def ping(
 
 
 # =========================
-# START
+# START BOT
 # =========================
 
 if __name__ == "__main__":
