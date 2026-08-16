@@ -11,6 +11,13 @@ from database.schema import create_tables
 
 
 # =========================
+# CONFIG
+# =========================
+
+GUILD_ID = 1142434590980571217
+
+
+# =========================
 # RENDER WEB SERVER
 # =========================
 
@@ -43,30 +50,38 @@ intents.message_content = True
 
 
 # =========================
-# BOT CLASS
+# BOT
 # =========================
 
 class GenraBot(commands.Bot):
 
     async def setup_hook(self):
 
-        print("SETUP HOOK STARTED")
+        print("")
+        print("================================")
+        print("GENRA BOT SETUP START")
+        print("================================")
 
         # =========================
         # DATABASE
         # =========================
 
+        print("[1/3] Initializing database...")
+
         try:
             await create_tables()
-            print("Database ready.")
+            print("[OK] Database ready.")
 
         except Exception as error:
-            print("Database error:")
-            print(f"{type(error).__name__}: {error}")
+            print("[ERROR] Database initialization failed:")
+            print(repr(error))
 
         # =========================
         # LOAD COGS
         # =========================
+
+        print("")
+        print("[2/3] Loading Cogs...")
 
         cogs = [
             "cogs.packs",
@@ -75,46 +90,65 @@ class GenraBot(commands.Bot):
 
         for cog in cogs:
 
-            print(f"Loading: {cog}")
-
             try:
                 await self.load_extension(cog)
-                print(f"Loaded: {cog}")
+
+                print(f"[OK] Loaded: {cog}")
 
             except Exception as error:
-                print(f"FAILED: {cog}")
-                print(
-                    f"{type(error).__name__}: {error}"
-                )
+
+                print(f"[ERROR] Failed to load: {cog}")
+                print(f"[ERROR] {type(error).__name__}: {error}")
 
         # =========================
-        # SYNC COMMANDS
+        # COMMAND LIST
         # =========================
 
-        print("Starting command sync...")
+        print("")
+        print("Commands currently registered:")
+
+        for command in self.tree.get_commands():
+
+            print(f" - /{command.name}")
+
+        # =========================
+        # GUILD SYNC
+        # =========================
+
+        print("")
+        print("[3/3] Synchronizing commands...")
 
         try:
 
-            synced = await self.tree.sync()
+            guild = discord.Object(
+                id=GUILD_ID
+            )
+
+            synced = await self.tree.sync(
+                guild=guild
+            )
 
             print(
-                f"Synced {len(synced)} commands."
+                f"[OK] Synced {len(synced)} commands "
+                f"to guild {GUILD_ID}"
             )
 
             for command in synced:
 
                 print(
-                    f"Command: /{command.name}"
+                    f"[OK] Discord command: /{command.name}"
                 )
 
         except Exception as error:
 
-            print("SYNC ERROR:")
-            print(
-                f"{type(error).__name__}: {error}"
-            )
+            print("[ERROR] Command synchronization failed:")
+            print(f"[ERROR] {type(error).__name__}: {error}")
 
-        print("SETUP HOOK FINISHED")
+        print("")
+        print("================================")
+        print("GENRA BOT SETUP FINISHED")
+        print("================================")
+        print("")
 
 
 # =========================
@@ -134,13 +168,38 @@ bot = GenraBot(
 @bot.event
 async def on_ready():
 
-    print("==============================")
+    print("")
+    print("================================")
     print("GENRA BOT ONLINE")
-    print("==============================")
-    print(f"Logged in as: {bot.user}")
+    print("================================")
+
+    print(f"Bot: {bot.user}")
     print(f"Bot ID: {bot.user.id}")
-    print("Genra Bot is ready!")
-    print("==============================")
+
+    guild = bot.get_guild(GUILD_ID)
+
+    if guild:
+
+        print(f"Guild: {guild.name}")
+        print(f"Guild ID: {guild.id}")
+
+    else:
+
+        print(
+            f"[WARNING] Guild {GUILD_ID} was not found."
+        )
+
+    print("")
+    print("Available slash commands:")
+
+    for command in bot.tree.get_commands():
+
+        print(f" - /{command.name}")
+
+    print("")
+    print("GENRA BOT IS READY")
+    print("================================")
+    print("")
 
 
 # =========================
@@ -149,7 +208,8 @@ async def on_ready():
 
 @bot.tree.command(
     name="ping",
-    description="Check bot latency"
+    description="Check bot latency",
+    guild=discord.Object(id=GUILD_ID)
 )
 async def ping(
     interaction: discord.Interaction
@@ -165,7 +225,7 @@ async def ping(
 
 
 # =========================
-# START BOT
+# START
 # =========================
 
 if __name__ == "__main__":
