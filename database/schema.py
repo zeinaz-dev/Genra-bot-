@@ -3,6 +3,10 @@ import sqlite3
 DATABASE = "genra.db"
 
 
+def get_connection():
+    return sqlite3.connect(DATABASE)
+
+
 def add_column_if_missing(
     cursor,
     table,
@@ -26,7 +30,7 @@ def add_column_if_missing(
 
 async def create_tables():
 
-    connection = sqlite3.connect(DATABASE)
+    connection = get_connection()
     cursor = connection.cursor()
 
     # =========================
