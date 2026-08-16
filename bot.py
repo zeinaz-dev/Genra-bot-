@@ -11,22 +11,16 @@ from discord.ext import commands
 from database.schema import create_tables
 
 
-# =========================
-# CONFIG
-# =========================
-
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 if not TOKEN:
-    raise ValueError(
-        "DISCORD_TOKEN is missing from environment variables."
-    )
+    raise ValueError("DISCORD_TOKEN is missing")
 
 
 # =========================
-# FLASK SERVER
+# FLASK
 # =========================
 
 app = Flask(__name__)
@@ -42,10 +36,8 @@ def health():
     return "OK", 200
 
 
-def run_web_server():
-    port = int(
-        os.getenv("PORT", "10000")
-    )
+def run_web():
+    port = int(os.getenv("PORT", "10000"))
 
     app.run(
         host="0.0.0.0",
@@ -55,10 +47,18 @@ def run_web_server():
 
 
 # =========================
-# DISCORD BOT
+# DISCORD INTENTS
 # =========================
 
 intents = discord.Intents.default()
+
+intents.message_content = True
+intents.members = True
+
+
+# =========================
+# BOT
+# =========================
 
 bot = commands.Bot(
     command_prefix="!",
@@ -67,7 +67,45 @@ bot = commands.Bot(
 
 
 # =========================
-# BOT READY
+# PING
+# =========================
+
+@bot.command(name="ping")
+async def ping(ctx):
+
+    latency = round(
+        bot.latency * 1000
+    )
+
+    await ctx.send(
+        f"🏓 Pong! `{latency}ms`"
+    )
+
+
+# =========================
+# SLASH PING
+# =========================
+
+@bot.tree.command(
+    name="ping",
+    description="Check if the bot is online."
+)
+async def slash_ping(
+    interaction: discord.Interaction
+):
+
+    latency = round(
+        bot.latency * 1000
+    )
+
+    await interaction.response.send_message(
+        f"🏓 Pong! `{latency}ms`",
+        ephemeral=True
+    )
+
+
+# =========================
+# READY
 # =========================
 
 @bot.event
@@ -75,15 +113,15 @@ async def on_ready():
 
     print("--------------------------------")
     print(f"✅ Logged in as: {bot.user}")
-    print(f"✅ Bot ID: {bot.user.id}")
-    print(f"✅ Servers: {len(bot.guilds)}")
+    print(f"🆔 ID: {bot.user.id}")
+    print(f"🌐 Servers: {len(bot.guilds)}")
 
     try:
 
         synced = await bot.tree.sync()
 
         print(
-            f"✅ Slash commands synced: {len(synced)}"
+            f"✅ Synced {len(synced)} slash commands"
         )
 
         for command in synced:
@@ -94,21 +132,17 @@ async def on_ready():
     except Exception as error:
 
         print(
-            "❌ Slash command sync failed:"
-        )
-
-        print(
-            repr(error)
+            f"❌ Slash sync error: {error!r}"
         )
 
     print("--------------------------------")
 
 
 # =========================
-# LOAD COGS
+# LOAD COG
 # =========================
 
-async def load_cogs():
+async def load_extensions():
 
     try:
 
@@ -117,13 +151,13 @@ async def load_cogs():
         )
 
         print(
-            "✅ Loaded: registration_scheduler"
+            "✅ registration_scheduler loaded"
         )
 
     except Exception as error:
 
         print(
-            "❌ Failed to load registration_scheduler:"
+            "❌ registration_scheduler ERROR:"
         )
 
         print(
@@ -132,12 +166,11 @@ async def load_cogs():
 
 
 # =========================
-# START DISCORD
+# START BOT
 # =========================
 
-async def start_discord():
+async def start_bot():
 
-    # Database
     try:
 
         create_tables()
@@ -149,43 +182,16 @@ async def start_discord():
     except Exception as error:
 
         print(
-            "❌ Database initialization failed:"
+            f"❌ Database error: {error!r}"
         )
 
-        print(
-            repr(error)
-        )
-
-    # Load cogs
-    await load_cogs()
+    await load_extensions()
 
     print(
         "🔵 Connecting to Discord..."
     )
 
-    try:
-
-        await bot.start(TOKEN)
-
-    except discord.LoginFailure:
-
-        print(
-            "❌ Discord login failed."
-        )
-
-        print(
-            "Check your DISCORD_TOKEN."
-        )
-
-    except Exception as error:
-
-        print(
-            "❌ Discord connection error:"
-        )
-
-        print(
-            repr(error)
-        )
+    await bot.start(TOKEN)
 
 
 # =========================
@@ -194,23 +200,21 @@ async def start_discord():
 
 def main():
 
-    # Start Flask in background
     web_thread = threading.Thread(
-        target=run_web_server,
+        target=run_web,
         daemon=True
     )
 
     web_thread.start()
 
     print(
-        "🌐 Flask web server started."
+        "🌐 Flask server started"
     )
 
-    # Start Discord
     try:
 
         asyncio.run(
-            start_discord()
+            start_bot()
         )
 
     except KeyboardInterrupt:
@@ -222,11 +226,7 @@ def main():
     except Exception as error:
 
         print(
-            "❌ Fatal error:"
-        )
-
-        print(
-            repr(error)
+            f"❌ Fatal error: {error!r}"
         )
 
 
