@@ -88,6 +88,7 @@ def load_closes():
     )
 
     if not os.path.exists(CLOSE_FILE):
+
         return []
 
     try:
@@ -173,7 +174,7 @@ class ScheduleSetupView(discord.ui.View):
         except Exception as error:
 
             print(
-                f"Channel selection error: {error!r}"
+                f"❌ Channel selection error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -207,7 +208,7 @@ class ScheduleSetupView(discord.ui.View):
         except Exception as error:
 
             print(
-                f"Role selection error: {error!r}"
+                f"❌ Role selection error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -258,7 +259,7 @@ class ScheduleSetupView(discord.ui.View):
         except Exception as error:
 
             print(
-                f"Continue button error: {error!r}"
+                f"❌ Continue button error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -311,18 +312,11 @@ class ScheduleModal(discord.ui.Modal):
         max_length=5
     )
 
-    close_date = discord.ui.TextInput(
-        label="Closing date - KSA",
-        placeholder="DD/MM/YYYY",
+    close_datetime = discord.ui.TextInput(
+        label="Closing date & time - KSA",
+        placeholder="DD/MM/YYYY HH:MM",
         required=True,
-        max_length=10
-    )
-
-    close_time = discord.ui.TextInput(
-        label="Closing time - KSA",
-        placeholder="23:00",
-        required=True,
-        max_length=5
+        max_length=16
     )
 
     message = discord.ui.TextInput(
@@ -345,9 +339,11 @@ class ScheduleModal(discord.ui.Modal):
                 self.open_time.value
             )
 
-            closing = parse_ksa(
-                self.close_date.value,
-                self.close_time.value
+            closing = datetime.strptime(
+                self.close_datetime.value.strip(),
+                "%d/%m/%Y %H:%M"
+            ).replace(
+                tzinfo=KSA
             )
 
             if opening <= now_ksa():
@@ -368,10 +364,11 @@ class ScheduleModal(discord.ui.Modal):
 
                 return
 
-            channel_ids = ",".join(
-                str(channel.id)
+            # Database expects a list of channel IDs.
+            channel_ids = [
+                channel.id
                 for channel in self.channels
-            )
+            ]
 
             schedule_id = create_schedule(
                 name=self.name.value.strip(),
@@ -422,24 +419,35 @@ class ScheduleModal(discord.ui.Modal):
                 inline=True
             )
 
+            embed.set_footer(
+                text=f"Schedule ID: {schedule_id}"
+            )
+
             await interaction.response.send_message(
                 embed=embed,
                 ephemeral=True
             )
 
+            print(
+                f"✅ Schedule created: {schedule_id}"
+            )
+
         except ValueError:
 
-            await interaction.response.send_message(
-                "❌ Invalid date/time.\n\n"
-                "Date: `DD/MM/YYYY`\n"
-                "Time: `HH:MM`",
-                ephemeral=True
-            )
+            if not interaction.response.is_done():
+
+                await interaction.response.send_message(
+                    "❌ Invalid date/time.\n\n"
+                    "Opening date: `DD/MM/YYYY`\n"
+                    "Opening time: `HH:MM`\n"
+                    "Closing: `DD/MM/YYYY HH:MM`",
+                    ephemeral=True
+                )
 
         except Exception as error:
 
             print(
-                f"Schedule creation error: {error!r}"
+                f"❌ Schedule creation error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -451,7 +459,7 @@ class ScheduleModal(discord.ui.Modal):
 
 
 # =========================================================
-# INDEPENDENT CLOSE VIEW
+# CLOSE SETUP VIEW
 # =========================================================
 
 class CloseSetupView(discord.ui.View):
@@ -491,7 +499,7 @@ class CloseSetupView(discord.ui.View):
         except Exception as error:
 
             print(
-                f"Close channel error: {error!r}"
+                f"❌ Close channel error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -525,7 +533,7 @@ class CloseSetupView(discord.ui.View):
         except Exception as error:
 
             print(
-                f"Close role error: {error!r}"
+                f"❌ Close role error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -575,7 +583,7 @@ class CloseSetupView(discord.ui.View):
         except Exception as error:
 
             print(
-                f"Close continue error: {error!r}"
+                f"❌ Close continue error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -605,18 +613,11 @@ class CloseModal(discord.ui.Modal):
         self.channel = channel
         self.role = role
 
-    close_date = discord.ui.TextInput(
-        label="Closing date - KSA",
-        placeholder="DD/MM/YYYY",
+    close_datetime = discord.ui.TextInput(
+        label="Closing date & time - KSA",
+        placeholder="DD/MM/YYYY HH:MM",
         required=True,
-        max_length=10
-    )
-
-    close_time = discord.ui.TextInput(
-        label="Closing time - KSA",
-        placeholder="23:00",
-        required=True,
-        max_length=5
+        max_length=16
     )
 
     message = discord.ui.TextInput(
@@ -634,9 +635,11 @@ class CloseModal(discord.ui.Modal):
 
         try:
 
-            closing = parse_ksa(
-                self.close_date.value,
-                self.close_time.value
+            closing = datetime.strptime(
+                self.close_datetime.value.strip(),
+                "%d/%m/%Y %H:%M"
+            ).replace(
+                tzinfo=KSA
             )
 
             if closing <= now_ksa():
@@ -684,15 +687,15 @@ class CloseModal(discord.ui.Modal):
         except ValueError:
 
             await interaction.response.send_message(
-                "❌ Invalid date/time.\n"
-                "Use `DD/MM/YYYY` and `HH:MM`.",
+                "❌ Invalid date/time.\n\n"
+                "Use: `DD/MM/YYYY HH:MM`",
                 ephemeral=True
             )
 
         except Exception as error:
 
             print(
-                f"Close creation error: {error!r}"
+                f"❌ Close creation error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -740,7 +743,7 @@ class RegistrationScheduler(commands.Cog):
         await self.bot.wait_until_ready()
 
     # =====================================================
-    # REGULAR SCHEDULES
+    # SCHEDULE PROCESSING
     # =====================================================
 
     async def process_schedules(self):
@@ -757,9 +760,13 @@ class RegistrationScheduler(commands.Cog):
                     schedule["open_datetime"]
                 )
 
-                closing = datetime.fromisoformat(
-                    schedule["close_datetime"]
-                )
+                closing = None
+
+                if schedule["close_datetime"]:
+
+                    closing = datetime.fromisoformat(
+                        schedule["close_datetime"]
+                    )
 
                 if (
                     schedule["status"] == "scheduled"
@@ -772,6 +779,7 @@ class RegistrationScheduler(commands.Cog):
 
                 elif (
                     schedule["status"] == "open"
+                    and closing is not None
                     and current >= closing
                 ):
 
@@ -782,7 +790,7 @@ class RegistrationScheduler(commands.Cog):
             except Exception as error:
 
                 print(
-                    f"Schedule {schedule.get('id')} error: "
+                    f"❌ Schedule {schedule['id']} error: "
                     f"{error!r}"
                 )
 
@@ -814,11 +822,17 @@ class RegistrationScheduler(commands.Cog):
 
                     result.append(channel)
 
-            except Exception:
+            except Exception as error:
 
-                pass
+                print(
+                    f"❌ Channel lookup error: {error!r}"
+                )
 
         return result
+
+    # =====================================================
+    # OPEN SCHEDULE
+    # =====================================================
 
     async def open_schedule(
         self,
@@ -831,6 +845,11 @@ class RegistrationScheduler(commands.Cog):
 
         if not channels:
 
+            print(
+                f"❌ No channels found for schedule "
+                f"{schedule['id']}"
+            )
+
             return
 
         guild = channels[0].guild
@@ -841,20 +860,25 @@ class RegistrationScheduler(commands.Cog):
 
         if role is None:
 
+            print(
+                f"❌ Role not found for schedule "
+                f"{schedule['id']}"
+            )
+
             return
 
         for channel in channels:
 
             try:
 
-                # Everyone cannot see it.
+                # Everyone cannot see the registration channel.
                 await channel.set_permissions(
                     guild.default_role,
                     view_channel=False
                 )
 
                 # Subscriber role:
-                # SEE + WRITE
+                # CAN SEE + CAN WRITE
                 await channel.set_permissions(
                     role,
                     view_channel=True,
@@ -872,10 +896,14 @@ class RegistrationScheduler(commands.Cog):
                     )
                 )
 
+                print(
+                    f"🟢 Opened channel {channel.id}"
+                )
+
             except Exception as error:
 
                 print(
-                    f"Open channel error: {error!r}"
+                    f"❌ Open channel error: {error!r}"
                 )
 
         update_status(
@@ -886,6 +914,10 @@ class RegistrationScheduler(commands.Cog):
         print(
             f"🟢 Registration {schedule['id']} opened."
         )
+
+    # =====================================================
+    # CLOSE SCHEDULE
+    # =====================================================
 
     async def close_schedule(
         self,
@@ -915,8 +947,8 @@ class RegistrationScheduler(commands.Cog):
             try:
 
                 # IMPORTANT:
-                # STILL VISIBLE
-                # CANNOT WRITE
+                # Subscribers STILL SEE the channel.
+                # Subscribers CANNOT WRITE.
                 await channel.set_permissions(
                     role,
                     view_channel=True,
@@ -937,7 +969,7 @@ class RegistrationScheduler(commands.Cog):
             except Exception as error:
 
                 print(
-                    f"Close channel error: {error!r}"
+                    f"❌ Close channel error: {error!r}"
                 )
 
         update_status(
@@ -950,7 +982,7 @@ class RegistrationScheduler(commands.Cog):
         )
 
     # =====================================================
-    # INDEPENDENT CLOSE
+    # INDEPENDENT CLOSE PROCESSING
     # =====================================================
 
     async def process_independent_closes(self):
@@ -1028,7 +1060,7 @@ class RegistrationScheduler(commands.Cog):
             except Exception as error:
 
                 print(
-                    f"Independent close error: {error!r}"
+                    f"❌ Independent close error: {error!r}"
                 )
 
         if changed:
@@ -1036,7 +1068,7 @@ class RegistrationScheduler(commands.Cog):
             save_closes(closes)
 
     # =====================================================
-    # /schedule
+    # /SCHEDULE
     # =====================================================
 
     @app_commands.command(
@@ -1078,7 +1110,7 @@ class RegistrationScheduler(commands.Cog):
         except Exception as error:
 
             print(
-                f"/schedule error: {error!r}"
+                f"❌ /schedule error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -1089,7 +1121,7 @@ class RegistrationScheduler(commands.Cog):
                 )
 
     # =====================================================
-    # /close_registration
+    # /CLOSE_REGISTRATION
     # =====================================================
 
     @app_commands.command(
@@ -1130,7 +1162,7 @@ class RegistrationScheduler(commands.Cog):
         except Exception as error:
 
             print(
-                f"/close_registration error: {error!r}"
+                f"❌ /close_registration error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -1141,7 +1173,7 @@ class RegistrationScheduler(commands.Cog):
                 )
 
     # =====================================================
-    # /open_now
+    # /OPEN_NOW
     # =====================================================
 
     @app_commands.command(
@@ -1193,7 +1225,7 @@ class RegistrationScheduler(commands.Cog):
         except Exception as error:
 
             print(
-                f"/open_now error: {error!r}"
+                f"❌ /open_now error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -1204,7 +1236,7 @@ class RegistrationScheduler(commands.Cog):
                 )
 
     # =====================================================
-    # /close_now
+    # /CLOSE_NOW
     # =====================================================
 
     @app_commands.command(
@@ -1256,7 +1288,7 @@ class RegistrationScheduler(commands.Cog):
         except Exception as error:
 
             print(
-                f"/close_now error: {error!r}"
+                f"❌ /close_now error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -1267,7 +1299,7 @@ class RegistrationScheduler(commands.Cog):
                 )
 
     # =====================================================
-    # /schedules
+    # /SCHEDULES
     # =====================================================
 
     @app_commands.command(
@@ -1312,8 +1344,18 @@ class RegistrationScheduler(commands.Cog):
                     schedule["open_datetime"]
                 )
 
-                closing = datetime.fromisoformat(
-                    schedule["close_datetime"]
+                closing = None
+
+                if schedule["close_datetime"]:
+
+                    closing = datetime.fromisoformat(
+                        schedule["close_datetime"]
+                    )
+
+                closing_text = (
+                    format_ksa(closing)
+                    if closing
+                    else "Not set"
                 )
 
                 embed.add_field(
@@ -1324,7 +1366,7 @@ class RegistrationScheduler(commands.Cog):
                     value=(
                         f"Status: `{schedule['status']}`\n"
                         f"Open: `{format_ksa(opening)}`\n"
-                        f"Close: `{format_ksa(closing)}`"
+                        f"Close: `{closing_text}`"
                     ),
                     inline=False
                 )
@@ -1337,7 +1379,7 @@ class RegistrationScheduler(commands.Cog):
         except Exception as error:
 
             print(
-                f"/schedules error: {error!r}"
+                f"❌ /schedules error: {error!r}"
             )
 
             if not interaction.response.is_done():
@@ -1348,7 +1390,7 @@ class RegistrationScheduler(commands.Cog):
                 )
 
     # =====================================================
-    # /cancel_schedule
+    # /CANCEL_SCHEDULE
     # =====================================================
 
     @app_commands.command(
@@ -1400,7 +1442,7 @@ class RegistrationScheduler(commands.Cog):
         except Exception as error:
 
             print(
-                f"/cancel_schedule error: {error!r}"
+                f"❌ /cancel_schedule error: {error!r}"
             )
 
             if not interaction.response.is_done():
