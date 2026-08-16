@@ -39,14 +39,13 @@ def run_web():
 # =========================
 
 intents = discord.Intents.default()
-
 intents.guilds = True
 intents.members = True
 intents.message_content = True
 
 
 # =========================
-# BOT
+# BOT CLASS
 # =========================
 
 class GenraBot(commands.Bot):
@@ -82,20 +81,11 @@ class GenraBot(commands.Bot):
 
             try:
                 await self.load_extension(cog)
-
-                print(
-                    f"Loaded: {cog}"
-                )
+                print(f"Loaded: {cog}")
 
             except Exception as error:
-
-                print(
-                    f"FAILED: {cog}"
-                )
-
-                print(
-                    repr(error)
-                )
+                print(f"FAILED: {cog}")
+                print(repr(error))
 
         # =========================
         # SYNC COMMANDS
@@ -103,9 +93,7 @@ class GenraBot(commands.Bot):
 
         try:
 
-            guild = discord.Object(
-                id=GUILD_ID
-            )
+            guild = discord.Object(id=GUILD_ID)
 
             synced = await self.tree.sync(
                 guild=guild
@@ -117,7 +105,6 @@ class GenraBot(commands.Bot):
             )
 
             for command in synced:
-
                 print(
                     f"Command loaded: /{command.name}"
                 )
@@ -139,7 +126,7 @@ bot = GenraBot(
 
 
 # =========================
-# READY
+# BOT READY
 # =========================
 
 @bot.event
@@ -162,9 +149,7 @@ async def on_ready():
     name="ping",
     description="Check bot latency"
 )
-async def ping(
-    interaction: discord.Interaction
-):
+async def ping(interaction: discord.Interaction):
 
     latency = round(
         bot.latency * 1000
@@ -176,11 +161,16 @@ async def ping(
 
 
 # =========================
-# START
+# START BOT
 # =========================
 
 if __name__ == "__main__":
 
     web_thread = Thread(
         target=run_web,
-        daemon
+        daemon=True
+    )
+
+    web_thread.start()
+
+    bot.run(TOKEN)
