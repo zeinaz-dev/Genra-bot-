@@ -1,2 +1,0 @@
-# Genra-bot-
-Bot 
