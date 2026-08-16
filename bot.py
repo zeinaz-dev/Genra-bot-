@@ -49,76 +49,100 @@ intents.members = True
 intents.message_content = True
 
 
-bot = commands.Bot(
+# =========================
+# BOT CLASS
+# =========================
+
+class GenraBot(commands.Bot):
+
+    async def setup_hook(self):
+
+        # =========================
+        # DATABASE
+        # =========================
+
+        try:
+            await create_tables()
+            print("Database ready.")
+
+        except Exception as error:
+            print("Database error:")
+            print(error)
+
+        # =========================
+        # LOAD COGS
+        # =========================
+
+        cogs = [
+            "cogs.packs",
+            "cogs.subscribers",
+            "cogs.teams",
+            "cogs.scheduler"
+        ]
+
+        for cog in cogs:
+
+            try:
+                await self.load_extension(cog)
+
+                print(
+                    f"Loaded: {cog}"
+                )
+
+            except Exception as error:
+
+                print(
+                    f"FAILED: {cog}"
+                )
+
+                print(
+                    repr(error)
+                )
+
+        # =========================
+        # GUILD SYNC
+        # =========================
+
+        try:
+
+            guild = discord.Object(
+                id=GUILD_ID
+            )
+
+            synced = await self.tree.sync(
+                guild=guild
+            )
+
+            print(
+                f"Synced {len(synced)} commands "
+                f"to server {GUILD_ID}"
+            )
+
+            for command in synced:
+
+                print(
+                    f"Command loaded: /{command.name}"
+                )
+
+        except Exception as error:
+
+            print(
+                "GUILD SYNC ERROR:"
+            )
+
+            print(
+                repr(error)
+            )
+
+
+# =========================
+# CREATE BOT
+# =========================
+
+bot = GenraBot(
     command_prefix="!",
     intents=intents
 )
-
-
-# =========================
-# LOAD COGS
-# =========================
-
-async def load_cogs():
-
-    cogs = [
-        "cogs.packs",
-        "cogs.subscribers",
-        "cogs.teams",
-        "cogs.scheduler"
-    ]
-
-    for cog in cogs:
-
-        try:
-            await bot.load_extension(cog)
-            print(f"Loaded: {cog}")
-
-        except Exception as error:
-            print(f"FAILED: {cog}")
-            print(error)
-
-
-# =========================
-# BOT SETUP
-# =========================
-
-@bot.event
-async def setup_hook():
-
-    try:
-        await create_tables()
-        print("Database ready.")
-
-    except Exception as error:
-        print(f"Database error: {error}")
-
-    await load_cogs()
-
-    try:
-
-        guild = discord.Object(id=GUILD_ID)
-
-        synced = await bot.tree.sync(
-            guild=guild
-        )
-
-        print(
-            f"Synced {len(synced)} commands "
-            f"to server {GUILD_ID}"
-        )
-
-        for command in synced:
-
-            print(
-                f"Command loaded: /{command.name}"
-            )
-
-    except Exception as error:
-
-        print(
-            f"GUILD SYNC ERROR: {error}"
-        )
 
 
 # =========================
