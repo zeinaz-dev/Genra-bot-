@@ -49,11 +49,13 @@ def format_ksa(dt: datetime) -> str:
 
 def load_independent_closes():
     os.makedirs(
-        os.path.dirname(INDEPENDENT_CLOSE_FILE),
+        "data",
         exist_ok=True
     )
 
-    if not os.path.exists(INDEPENDENT_CLOSE_FILE):
+    if not os.path.exists(
+        INDEPENDENT_CLOSE_FILE
+    ):
         return []
 
     try:
@@ -73,7 +75,7 @@ def load_independent_closes():
 
 def save_independent_closes(closes):
     os.makedirs(
-        os.path.dirname(INDEPENDENT_CLOSE_FILE),
+        "data",
         exist_ok=True
     )
 
@@ -262,22 +264,22 @@ class ScheduleModal(discord.ui.Modal):
         interaction: discord.Interaction
     ):
         try:
-            opening_date_value = datetime.strptime(
+            open_date = datetime.strptime(
                 self.opening_date.value.strip(),
                 "%d/%m/%Y"
             )
 
-            opening_time_value = datetime.strptime(
+            open_time = datetime.strptime(
                 self.opening_time.value.strip(),
                 "%H:%M"
             )
 
-            closing_date_value = datetime.strptime(
+            close_date = datetime.strptime(
                 self.closing_date.value.strip(),
                 "%d/%m/%Y"
             )
 
-            closing_time_value = datetime.strptime(
+            close_time = datetime.strptime(
                 self.closing_time.value.strip(),
                 "%H:%M"
             )
@@ -285,27 +287,27 @@ class ScheduleModal(discord.ui.Modal):
         except ValueError:
             await interaction.response.send_message(
                 "❌ Invalid date or time.\n\n"
-                "Date format: `DD/MM/YYYY`\n"
-                "Time format: `HH:MM`",
+                "Date: `DD/MM/YYYY`\n"
+                "Time: `HH:MM`",
                 ephemeral=True
             )
             return
 
         open_datetime = datetime(
-            opening_date_value.year,
-            opening_date_value.month,
-            opening_date_value.day,
-            opening_time_value.hour,
-            opening_time_value.minute,
+            open_date.year,
+            open_date.month,
+            open_date.day,
+            open_time.hour,
+            open_time.minute,
             tzinfo=KSA
         )
 
         close_datetime = datetime(
-            closing_date_value.year,
-            closing_date_value.month,
-            closing_date_value.day,
-            closing_time_value.hour,
-            closing_time_value.minute,
+            close_date.year,
+            close_date.month,
+            close_date.day,
+            close_time.hour,
+            close_time.minute,
             tzinfo=KSA
         )
 
@@ -313,15 +315,14 @@ class ScheduleModal(discord.ui.Modal):
 
         if open_datetime <= now:
             await interaction.response.send_message(
-                "❌ The opening date/time must be in the future.",
+                "❌ Opening time must be in the future.",
                 ephemeral=True
             )
             return
 
         if close_datetime <= open_datetime:
             await interaction.response.send_message(
-                "❌ The closing date/time must be after "
-                "the opening date/time.",
+                "❌ Closing time must be after opening time.",
                 ephemeral=True
             )
             return
@@ -329,10 +330,10 @@ class ScheduleModal(discord.ui.Modal):
         try:
             schedule_id = create_schedule(
                 name=self.registration_name.value.strip(),
-                channel_ids=[
-                    channel.id
+                channel_ids=",".join(
+                    str(channel.id)
                     for channel in self.channels
-                ],
+                ),
                 role_id=self.role.id,
                 open_datetime=open_datetime.isoformat(),
                 close_datetime=close_datetime.isoformat(),
@@ -341,12 +342,11 @@ class ScheduleModal(discord.ui.Modal):
 
         except Exception as error:
             print(
-                f"Could not create schedule: {error}"
+                f"Create schedule error: {error}"
             )
 
             await interaction.response.send_message(
-                "❌ Could not create the schedule. "
-                "Check the database.",
+                "❌ Could not create the schedule.",
                 ephemeral=True
             )
             return
@@ -380,7 +380,7 @@ class ScheduleModal(discord.ui.Modal):
         )
 
         embed.add_field(
-            name="Mention Role",
+            name="Role",
             value=self.role.mention,
             inline=False
         )
@@ -393,9 +393,7 @@ class ScheduleModal(discord.ui.Modal):
 
         embed.add_field(
             name="Opening Message",
-            value=self.opening_message.value[
-                :1024
-            ],
+            value=self.opening_message.value[:1024],
             inline=False
         )
 
@@ -403,10 +401,6 @@ class ScheduleModal(discord.ui.Modal):
             name="Closing Message",
             value="Default closing message",
             inline=False
-        )
-
-        embed.set_footer(
-            text=f"Schedule ID: {schedule_id}"
         )
 
         await interaction.response.send_message(
@@ -439,8 +433,7 @@ class IndependentCloseView(discord.ui.View):
         self.channel = select.values[0]
 
         await interaction.response.send_message(
-            f"✅ Selected channel: "
-            f"{self.channel.mention}",
+            f"✅ Selected: {self.channel.mention}",
             ephemeral=True
         )
 
@@ -480,7 +473,7 @@ class IndependentCloseView(discord.ui.View):
 
         if self.role is None:
             await interaction.response.send_message(
-                "❌ Select a role to mention.",
+                "❌ Select a role.",
                 ephemeral=True
             )
             return
@@ -550,8 +543,8 @@ class IndependentCloseModal(discord.ui.Modal):
         except ValueError:
             await interaction.response.send_message(
                 "❌ Invalid date or time.\n\n"
-                "Date format: `DD/MM/YYYY`\n"
-                "Time format: `HH:MM`",
+                "Date: `DD/MM/YYYY`\n"
+                "Time: `HH:MM`",
                 ephemeral=True
             )
             return
@@ -565,12 +558,9 @@ class IndependentCloseModal(discord.ui.Modal):
             tzinfo=KSA
         )
 
-        now = datetime.now(KSA)
-
-        if close_datetime <= now:
+        if close_datetime <= datetime.now(KSA):
             await interaction.response.send_message(
-                "❌ The closing date/time must be "
-                "in the future.",
+                "❌ Closing time must be in the future.",
                 ephemeral=True
             )
             return
@@ -585,17 +575,17 @@ class IndependentCloseModal(discord.ui.Modal):
                 for item in closes
             ) + 1
 
-        close_data = {
-            "id": next_id,
-            "channel_id": self.channel.id,
-            "role_id": self.role.id,
-            "guild_id": self.channel.guild.id,
-            "close_datetime": close_datetime.isoformat(),
-            "message": self.closing_message.value.strip(),
-            "status": "scheduled"
-        }
-
-        closes.append(close_data)
+        closes.append(
+            {
+                "id": next_id,
+                "channel_id": self.channel.id,
+                "role_id": self.role.id,
+                "guild_id": self.channel.guild.id,
+                "close_datetime": close_datetime.isoformat(),
+                "message": self.closing_message.value.strip(),
+                "status": "scheduled"
+            }
+        )
 
         save_independent_closes(closes)
 
@@ -611,7 +601,7 @@ class IndependentCloseModal(discord.ui.Modal):
         )
 
         embed.add_field(
-            name="Mention Role",
+            name="Role",
             value=self.role.mention,
             inline=False
         )
@@ -623,15 +613,9 @@ class IndependentCloseModal(discord.ui.Modal):
         )
 
         embed.add_field(
-            name="Closing Message",
-            value=self.closing_message.value[
-                :1024
-            ],
+            name="Message",
+            value=self.closing_message.value[:1024],
             inline=False
-        )
-
-        embed.set_footer(
-            text=f"Close ID: {next_id}"
         )
 
         await interaction.response.send_message(
@@ -735,12 +719,6 @@ class RegistrationScheduler(commands.Cog):
                 )
 
                 if channel is None:
-                    print(
-                        f"Independent close "
-                        f"{close_data['id']}: "
-                        f"channel not found."
-                    )
-
                     close_data["status"] = "error"
                     changed = True
                     continue
@@ -750,12 +728,6 @@ class RegistrationScheduler(commands.Cog):
                 )
 
                 if role is None:
-                    print(
-                        f"Independent close "
-                        f"{close_data['id']}: "
-                        f"role not found."
-                    )
-
                     close_data["status"] = "error"
                     changed = True
                     continue
@@ -769,16 +741,9 @@ class RegistrationScheduler(commands.Cog):
                 close_data["status"] = "closed"
                 changed = True
 
-                print(
-                    f"Independent close "
-                    f"{close_data['id']} completed."
-                )
-
             except Exception as error:
                 print(
-                    f"Independent close "
-                    f"{close_data['id']} error: "
-                    f"{error}"
+                    f"Independent close error: {error}"
                 )
 
         if changed:
@@ -788,21 +753,22 @@ class RegistrationScheduler(commands.Cog):
 
         channels = []
 
-        channel_ids = schedule[
-            "channel_ids"
-        ]
+        channel_ids = schedule["channel_ids"]
 
-        for channel_id in channel_ids.split(","):
+        if isinstance(channel_ids, str):
+            channel_ids = channel_ids.split(",")
+
+        for channel_id in channel_ids:
 
             try:
                 channel = self.bot.get_channel(
                     int(channel_id)
                 )
 
-                if channel is not None:
+                if channel:
                     channels.append(channel)
 
-            except ValueError:
+            except Exception:
                 continue
 
         return channels
@@ -817,10 +783,6 @@ class RegistrationScheduler(commands.Cog):
         )
 
         if not channels:
-            print(
-                f"No channels found for schedule "
-                f"{schedule['id']}"
-            )
             return
 
         guild = channels[0].guild
@@ -830,24 +792,24 @@ class RegistrationScheduler(commands.Cog):
         )
 
         if role is None:
-            print(
-                f"Role not found for schedule "
-                f"{schedule['id']}"
-            )
             return
 
         for channel in channels:
 
             try:
+                # Everyone cannot see registration channel.
                 await channel.set_permissions(
                     guild.default_role,
-                    send_messages=False
+                    view_channel=False
                 )
 
+                # Selected registration role:
+                # CAN SEE + CAN WRITE.
                 await channel.set_permissions(
                     role,
                     view_channel=True,
-                    send_messages=True
+                    send_messages=True,
+                    read_message_history=True
                 )
 
                 message = replace_placeholders(
@@ -869,8 +831,7 @@ class RegistrationScheduler(commands.Cog):
 
             except Exception as error:
                 print(
-                    f"Error opening channel "
-                    f"{channel.id}: {error}"
+                    f"Opening channel error: {error}"
                 )
 
         update_status(
@@ -906,9 +867,14 @@ class RegistrationScheduler(commands.Cog):
         for channel in channels:
 
             try:
+                # IMPORTANT:
+                # Role STILL sees the channel.
+                # Role CANNOT write.
                 await channel.set_permissions(
                     role,
-                    send_messages=False
+                    view_channel=True,
+                    send_messages=False,
+                    read_message_history=True
                 )
 
                 await channel.send(
@@ -923,8 +889,7 @@ class RegistrationScheduler(commands.Cog):
 
             except Exception as error:
                 print(
-                    f"Error closing channel "
-                    f"{channel.id}: {error}"
+                    f"Closing channel error: {error}"
                 )
 
         update_status(
@@ -943,9 +908,14 @@ class RegistrationScheduler(commands.Cog):
         message
     ):
 
+        # IMPORTANT:
+        # Keep VIEW permission.
+        # Remove WRITE permission.
         await channel.set_permissions(
             role,
-            send_messages=False
+            view_channel=True,
+            send_messages=False,
+            read_message_history=True
         )
 
         message = replace_placeholders(
@@ -993,12 +963,8 @@ class RegistrationScheduler(commands.Cog):
         embed = discord.Embed(
             title="📅 Registration Scheduler",
             description=(
-                "Create a scheduled registration.\n\n"
-                "1️⃣ Select one or more channels\n"
-                "2️⃣ Select the role to mention\n"
-                "3️⃣ Press **Continue**\n"
-                "4️⃣ Enter opening and closing times\n"
-                "5️⃣ Write your **opening message**"
+                "Select the registration channels "
+                "and role."
             ),
             color=discord.Color.blurple()
         )
@@ -1038,13 +1004,8 @@ class RegistrationScheduler(commands.Cog):
         embed = discord.Embed(
             title="🔒 Schedule Registration Close",
             description=(
-                "This close is **independent** from "
-                "the registration scheduler.\n\n"
-                "1️⃣ Select **ONE channel**\n"
-                "2️⃣ Select the role to mention\n"
-                "3️⃣ Press **Continue**\n"
-                "4️⃣ Enter the closing date/time in KSA\n"
-                "5️⃣ Write your custom closing message"
+                "Select ONE registration channel, "
+                "the role, closing time and message."
             ),
             color=discord.Color.red()
         )
@@ -1074,25 +1035,16 @@ class RegistrationScheduler(commands.Cog):
             interaction.user
         ):
             await interaction.response.send_message(
-                "❌ Only members with "
-                "**Administrator** permission "
-                "can use this command.",
+                "❌ Administrator only.",
                 ephemeral=True
             )
             return
 
-        try:
-            schedules = get_active_schedules()
-        except Exception as error:
-            await interaction.response.send_message(
-                f"❌ Database error: {error}",
-                ephemeral=True
-            )
-            return
+        schedules = get_active_schedules()
 
         if not schedules:
             await interaction.response.send_message(
-                "📭 No scheduled registrations.",
+                "📭 No schedules found.",
                 ephemeral=True
             )
             return
@@ -1104,27 +1056,22 @@ class RegistrationScheduler(commands.Cog):
 
         for schedule in schedules:
 
-            open_datetime = datetime.fromisoformat(
+            opening = datetime.fromisoformat(
                 schedule["open_datetime"]
             )
 
-            close_datetime = datetime.fromisoformat(
+            closing = datetime.fromisoformat(
                 schedule["close_datetime"]
-            )
-
-            value = (
-                f"**Status:** "
-                f"{schedule['status'].upper()}\n"
-                f"**Opening:** "
-                f"{format_ksa(open_datetime)}\n"
-                f"**Closing:** "
-                f"{format_ksa(close_datetime)}\n"
-                f"**ID:** `{schedule['id']}`"
             )
 
             embed.add_field(
                 name=schedule["name"],
-                value=value,
+                value=(
+                    f"Status: `{schedule['status']}`\n"
+                    f"Open: `{format_ksa(opening)}`\n"
+                    f"Close: `{format_ksa(closing)}`\n"
+                    f"ID: `{schedule['id']}`"
+                ),
                 inline=False
             )
 
@@ -1156,9 +1103,7 @@ class RegistrationScheduler(commands.Cog):
             interaction.user
         ):
             await interaction.response.send_message(
-                "❌ Only members with "
-                "**Administrator** permission "
-                "can use this command.",
+                "❌ Administrator only.",
                 ephemeral=True
             )
             return
@@ -1185,7 +1130,7 @@ class RegistrationScheduler(commands.Cog):
 
     @app_commands.command(
         name="open_now",
-        description="Open a scheduled registration immediately."
+        description="Open a registration immediately."
     )
     @app_commands.describe(
         schedule_id="Schedule ID"
@@ -1206,9 +1151,7 @@ class RegistrationScheduler(commands.Cog):
             interaction.user
         ):
             await interaction.response.send_message(
-                "❌ Only members with "
-                "**Administrator** permission "
-                "can use this command.",
+                "❌ Administrator only.",
                 ephemeral=True
             )
             return
@@ -1224,13 +1167,6 @@ class RegistrationScheduler(commands.Cog):
             )
             return
 
-        if schedule["status"] == "open":
-            await interaction.response.send_message(
-                "⚠️ This registration is already open.",
-                ephemeral=True
-            )
-            return
-
         await self.open_registration(
             schedule
         )
@@ -1242,7 +1178,7 @@ class RegistrationScheduler(commands.Cog):
 
     @app_commands.command(
         name="close_now",
-        description="Close a scheduled registration immediately."
+        description="Close a registration immediately."
     )
     @app_commands.describe(
         schedule_id="Schedule ID"
@@ -1263,9 +1199,7 @@ class RegistrationScheduler(commands.Cog):
             interaction.user
         ):
             await interaction.response.send_message(
-                "❌ Only members with "
-                "**Administrator** permission "
-                "can use this command.",
+                "❌ Administrator only.",
                 ephemeral=True
             )
             return
@@ -1277,13 +1211,6 @@ class RegistrationScheduler(commands.Cog):
         if schedule is None:
             await interaction.response.send_message(
                 "❌ Schedule not found.",
-                ephemeral=True
-            )
-            return
-
-        if schedule["status"] != "open":
-            await interaction.response.send_message(
-                "⚠️ This registration is not currently open.",
                 ephemeral=True
             )
             return
