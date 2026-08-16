@@ -1,24 +1,26 @@
 import os
-from threading import Thread
+import asyncio
+import threading
 
 from flask import Flask
+from dotenv import load_dotenv
 
 import discord
 from discord.ext import commands
 
-from config import TOKEN
 from database.schema import create_tables
 
 
-# =========================
-# CONFIG
-# =========================
+load_dotenv()
 
-GUILD_ID = 1142434590980571217
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+if not TOKEN:
+    raise ValueError("DISCORD_TOKEN is missing")
 
 
 # =========================
-# RENDER WEB SERVER
+# FLASK
 # =========================
 
 app = Flask(__name__)
@@ -26,15 +28,21 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Genra Bot is Online!"
+    return "Genra Bot is online!", 200
+
+
+@app.route("/health")
+def health():
+    return "OK", 200
 
 
 def run_web():
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.getenv("PORT", "10000"))
 
     app.run(
         host="0.0.0.0",
-        port=port
+        port=port,
+        use_reloader=False
     )
 
 
@@ -44,174 +52,45 @@ def run_web():
 
 intents = discord.Intents.default()
 
-intents.guilds = True
-intents.members = True
 intents.message_content = True
+intents.members = True
 
 
 # =========================
 # BOT
 # =========================
 
-class GenraBot(commands.Bot):
-
-    async def setup_hook(self):
-
-        print("")
-        print("================================")
-        print("GENRA BOT SETUP START")
-        print("================================")
-
-        # =========================
-        # DATABASE
-        # =========================
-
-        print("[1/3] Initializing database...")
-
-        try:
-            await create_tables()
-            print("[OK] Database ready.")
-
-        except Exception as error:
-            print("[ERROR] Database initialization failed:")
-            print(repr(error))
-
-        # =========================
-        # LOAD COGS
-        # =========================
-
-        print("")
-        print("[2/3] Loading Cogs...")
-
-        cogs = [
-            "cogs.packs",
-            "cogs.scheduler"
-        ]
-
-        for cog in cogs:
-
-            try:
-                await self.load_extension(cog)
-
-                print(f"[OK] Loaded: {cog}")
-
-            except Exception as error:
-
-                print(f"[ERROR] Failed to load: {cog}")
-                print(f"[ERROR] {type(error).__name__}: {error}")
-
-        # =========================
-        # COMMAND LIST
-        # =========================
-
-        print("")
-        print("Commands currently registered:")
-
-        for command in self.tree.get_commands():
-
-            print(f" - /{command.name}")
-
-        # =========================
-        # GUILD SYNC
-        # =========================
-
-        print("")
-        print("[3/3] Synchronizing commands...")
-
-        try:
-
-            guild = discord.Object(
-                id=GUILD_ID
-            )
-
-            synced = await self.tree.sync(
-                guild=guild
-            )
-
-            print(
-                f"[OK] Synced {len(synced)} commands "
-                f"to guild {GUILD_ID}"
-            )
-
-            for command in synced:
-
-                print(
-                    f"[OK] Discord command: /{command.name}"
-                )
-
-        except Exception as error:
-
-            print("[ERROR] Command synchronization failed:")
-            print(f"[ERROR] {type(error).__name__}: {error}")
-
-        print("")
-        print("================================")
-        print("GENRA BOT SETUP FINISHED")
-        print("================================")
-        print("")
-
-
-# =========================
-# CREATE BOT
-# =========================
-
-bot = GenraBot(
+bot = commands.Bot(
     command_prefix="!",
     intents=intents
 )
 
 
 # =========================
-# BOT READY
-# =========================
-
-@bot.event
-async def on_ready():
-
-    print("")
-    print("================================")
-    print("GENRA BOT ONLINE")
-    print("================================")
-
-    print(f"Bot: {bot.user}")
-    print(f"Bot ID: {bot.user.id}")
-
-    guild = bot.get_guild(GUILD_ID)
-
-    if guild:
-
-        print(f"Guild: {guild.name}")
-        print(f"Guild ID: {guild.id}")
-
-    else:
-
-        print(
-            f"[WARNING] Guild {GUILD_ID} was not found."
-        )
-
-    print("")
-    print("Available slash commands:")
-
-    for command in bot.tree.get_commands():
-
-        print(f" - /{command.name}")
-
-    print("")
-    print("GENRA BOT IS READY")
-    print("================================")
-    print("")
-
-
-# =========================
 # PING
+# =========================
+
+@bot.command(name="ping")
+async def ping(ctx):
+
+    latency = round(
+        bot.latency * 1000
+    )
+
+    await ctx.send(
+        f"🏓 Pong! `{latency}ms`"
+    )
+
+
+# =========================
+# SLASH PING
 # =========================
 
 @bot.tree.command(
     name="ping",
-    description="Check bot latency",
-    guild=discord.Object(id=GUILD_ID)
+    description="Check if the bot is online."
 )
-async def ping(
+async def slash_ping(
     interaction: discord.Interaction
 ):
 
@@ -220,23 +99,136 @@ async def ping(
     )
 
     await interaction.response.send_message(
-        f"🏓 Pong! {latency}ms"
+        f"🏓 Pong! `{latency}ms`",
+        ephemeral=True
     )
 
 
 # =========================
-# START
+# READY
 # =========================
 
-if __name__ == "__main__":
+@bot.event
+async def on_ready():
 
-    print("STARTING GENRA BOT")
+    print("--------------------------------")
+    print(f"✅ Logged in as: {bot.user}")
+    print(f"🆔 ID: {bot.user.id}")
+    print(f"🌐 Servers: {len(bot.guilds)}")
 
-    web_thread = Thread(
+    try:
+
+        synced = await bot.tree.sync()
+
+        print(
+            f"✅ Synced {len(synced)} slash commands"
+        )
+
+        for command in synced:
+            print(
+                f"   /{command.name}"
+            )
+
+    except Exception as error:
+
+        print(
+            f"❌ Slash sync error: {error!r}"
+        )
+
+    print("--------------------------------")
+
+
+# =========================
+# LOAD COG
+# =========================
+
+async def load_extensions():
+
+    try:
+
+        await bot.load_extension(
+            "cogs.registration_scheduler"
+        )
+
+        print(
+            "✅ registration_scheduler loaded"
+        )
+
+    except Exception as error:
+
+        print(
+            "❌ registration_scheduler ERROR:"
+        )
+
+        print(
+            repr(error)
+        )
+
+
+# =========================
+# START BOT
+# =========================
+
+async def start_bot():
+
+    try:
+
+        create_tables()
+
+        print(
+            "✅ Database initialized"
+        )
+
+    except Exception as error:
+
+        print(
+            f"❌ Database error: {error!r}"
+        )
+
+    await load_extensions()
+
+    print(
+        "🔵 Connecting to Discord..."
+    )
+
+    await bot.start(TOKEN)
+
+
+# =========================
+# MAIN
+# =========================
+
+def main():
+
+    web_thread = threading.Thread(
         target=run_web,
         daemon=True
     )
 
     web_thread.start()
 
-    bot.run(TOKEN)
+    print(
+        "🌐 Flask server started"
+    )
+
+    try:
+
+        asyncio.run(
+            start_bot()
+        )
+
+    except KeyboardInterrupt:
+
+        print(
+            "Bot stopped."
+        )
+
+    except Exception as error:
+
+        print(
+            f"❌ Fatal error: {error!r}"
+        )
+
+
+if __name__ == "__main__":
+    main()
