@@ -1,102 +1,38 @@
-import discord
-from discord.ext import commands
 import sqlite3
+
+import discord
+from discord import app_commands
+from discord.ext import commands
+
 from database.schema import DATABASE
+from utils.permissions import STAFF_ROLE_IDS
+
+
+def is_staff(member):
+    return any(
+        role.id in STAFF_ROLE_IDS
+        for role in member.roles
+    )
 
 
 class Teams(commands.Cog):
+
     def __init__(self, bot):
         self.bot = bot
 
-
-    @discord.app_commands.command(
-        name="team",
-        description="Register a team"
-    )
-    @discord.app_commands.describe(
-        team_name="Name of your team",
-        pack="Choose your package"
-    )
-    async def team(
+    async def show_list(
         self,
-        interaction: discord.Interaction,
-        team_name: str,
-        pack: str
+        interaction,
+        package,
+        group
     ):
-        pack = pack.upper()
 
-        connection = sqlite3.connect(DATABASE)
-        cursor = connection.cursor()
-
-        cursor.execute(
-            "SELECT name FROM packs WHERE name = ?",
-            (pack,)
-        )
-
-        if not cursor.fetchone():
-            connection.close()
-
+        if not is_staff(interaction.user):
             await interaction.response.send_message(
-                "Invalid package. Use CLASH, EMPIRE or TRAINING.",
+                "❌ Staff only.",
                 ephemeral=True
             )
             return
-
-        cursor.execute(
-            """
-            SELECT id
-            FROM teams
-            WHERE team_name = ? AND pack = ?
-            """,
-            (team_name, pack)
-        )
-
-        if cursor.fetchone():
-            connection.close()
-
-            await interaction.response.send_message(
-                "This team is already registered for this package.",
-                ephemeral=True
-            )
-            return
-
-        cursor.execute(
-            """
-            INSERT INTO teams (
-                team_name,
-                discord_id,
-                pack
-            )
-            VALUES (?, ?, ?)
-            """,
-            (
-                team_name,
-                interaction.user.id,
-                pack
-            )
-        )
-
-        connection.commit()
-        connection.close()
-
-        await interaction.response.send_message(
-            f"Team **{team_name}** registered successfully for **{pack}**."
-        )
-
-
-    @discord.app_commands.command(
-        name="teams",
-        description="Show registered teams"
-    )
-    @discord.app_commands.describe(
-        pack="Choose a package"
-    )
-    async def teams(
-        self,
-        interaction: discord.Interaction,
-        pack: str
-    ):
-        pack = pack.upper()
 
         connection = sqlite3.connect(DATABASE)
         cursor = connection.cursor()
@@ -106,33 +42,129 @@ class Teams(commands.Cog):
             SELECT team_name
             FROM teams
             WHERE pack = ?
-            ORDER BY id
+            AND group_name = ?
+            ORDER BY id ASC
+            LIMIT 20
             """,
-            (pack,)
+            (
+                package,
+                group
+            )
         )
 
         teams = cursor.fetchall()
 
         connection.close()
 
-        if not teams:
-            await interaction.response.send_message(
-                f"No teams registered for **{pack}**."
-            )
-            return
+        if package == "CLASH":
+            title = "GENRA CLASH SERIES"
 
-        team_list = "\n".join(
-            f"{index}. {team[0]}"
-            for index, team in enumerate(teams, start=1)
-        )
+        elif package == "EMPIRE":
+            title = "EMPIRE SERIES"
+
+        else:
+            title = "TRAINING SERIES"
+
+        lines = []
+
+        for number, team in enumerate(
+            teams,
+            start=3
+        ):
+            lines.append(
+                f"{number} - {team[0]}"
+            )
+
+        if not lines:
+            lines.append(
+                "No teams registered."
+            )
 
         embed = discord.Embed(
-            title=f"{pack} TEAMS",
-            description=team_list,
+            title=title,
+            description="\n".join(lines),
             color=discord.Color.green()
         )
 
-        await interaction.response.send_message(embed=embed)
+        embed.add_field(
+            name="INFO",
+            value=(
+                "Date: Today\n"
+                "3 Matches\n"
+                "3 Same Tag or 0 Pts"
+            ),
+            inline=False
+        )
+
+        await interaction.response.send_message(
+            embed=embed
+        )
+
+    @app_commands.command(
+        name="teams_clash_a",
+        description="Show Clash Group A"
+    )
+    async def clash_a(self, interaction):
+        await self.show_list(
+            interaction,
+            "CLASH",
+            "A"
+        )
+
+    @app_commands.command(
+        name="teams_clash_b",
+        description="Show Clash Group B"
+    )
+    async def clash_b(self, interaction):
+        await self.show_list(
+            interaction,
+            "CLASH",
+            "B"
+        )
+
+    @app_commands.command(
+        name="teams_empire_a",
+        description="Show Empire Group A"
+    )
+    async def empire_a(self, interaction):
+        await self.show_list(
+            interaction,
+            "EMPIRE",
+            "A"
+        )
+
+    @app_commands.command(
+        name="teams_empire_b",
+        description="Show Empire Group B"
+    )
+    async def empire_b(self, interaction):
+        await self.show_list(
+            interaction,
+            "EMPIRE",
+            "B"
+        )
+
+    @app_commands.command(
+        name="teams_training_a",
+        description="Show Training Group A"
+    )
+    async def training_a(self, interaction):
+        await self.show_list(
+            interaction,
+            "TRAINING",
+            "A"
+        )
+
+    @app_commands.command(
+        name="teams_training_b",
+        description="Show Training Group B"
+    )
+    async def training_b(self, interaction):
+        await self.show_list(
+            interaction,
+            "TRAINING",
+            "B"
+        )
 
 
 async def setup(bot):
