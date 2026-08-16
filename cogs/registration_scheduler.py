@@ -555,4 +555,168 @@ class RegistrationScheduler(commands.Cog):
             )
 
             value = (
-                f"**Status:** {schedule['status'].upper()
+                f"**Status:** {schedule['status'].upper()}\n"
+                f"**Opening:** {format_ksa(open_datetime)}\n"
+                f"**Closing:** {format_ksa(close_datetime)}\n"
+                f"**ID:** `{schedule['id']}`"
+            )
+
+            embed.add_field(
+                name=schedule["name"],
+                value=value,
+                inline=False
+            )
+
+        await interaction.response.send_message(
+            embed=embed,
+            ephemeral=True
+        )
+
+    @app_commands.command(
+        name="cancel_schedule",
+        description="Cancel a registration schedule."
+    )
+    @app_commands.describe(
+        schedule_id="Schedule ID"
+    )
+    async def cancel_schedule(
+        self,
+        interaction: discord.Interaction,
+        schedule_id: int
+    ):
+
+        if not isinstance(
+            interaction.user,
+            discord.Member
+        ):
+            return
+
+        if not is_admin(interaction.user):
+            await interaction.response.send_message(
+                "❌ Only members with **Administrator** permission "
+                "can use this command.",
+                ephemeral=True
+            )
+            return
+
+        schedule = get_schedule(schedule_id)
+
+        if schedule is None:
+            await interaction.response.send_message(
+                "❌ Schedule not found.",
+                ephemeral=True
+            )
+            return
+
+        delete_schedule(schedule_id)
+
+        await interaction.response.send_message(
+            f"✅ Schedule `{schedule_id}` cancelled.",
+            ephemeral=True
+        )
+
+    @app_commands.command(
+        name="open_now",
+        description="Open a registration immediately."
+    )
+    @app_commands.describe(
+        schedule_id="Schedule ID"
+    )
+    async def open_now(
+        self,
+        interaction: discord.Interaction,
+        schedule_id: int
+    ):
+
+        if not isinstance(
+            interaction.user,
+            discord.Member
+        ):
+            return
+
+        if not is_admin(interaction.user):
+            await interaction.response.send_message(
+                "❌ Only members with **Administrator** permission "
+                "can use this command.",
+                ephemeral=True
+            )
+            return
+
+        schedule = get_schedule(schedule_id)
+
+        if schedule is None:
+            await interaction.response.send_message(
+                "❌ Schedule not found.",
+                ephemeral=True
+            )
+            return
+
+        if schedule["status"] == "open":
+            await interaction.response.send_message(
+                "⚠️ This registration is already open.",
+                ephemeral=True
+            )
+            return
+
+        await self.open_registration(schedule)
+
+        await interaction.response.send_message(
+            f"✅ Registration `{schedule_id}` opened.",
+            ephemeral=True
+        )
+
+    @app_commands.command(
+        name="close_now",
+        description="Close a registration immediately."
+    )
+    @app_commands.describe(
+        schedule_id="Schedule ID"
+    )
+    async def close_now(
+        self,
+        interaction: discord.Interaction,
+        schedule_id: int
+    ):
+
+        if not isinstance(
+            interaction.user,
+            discord.Member
+        ):
+            return
+
+        if not is_admin(interaction.user):
+            await interaction.response.send_message(
+                "❌ Only members with **Administrator** permission "
+                "can use this command.",
+                ephemeral=True
+            )
+            return
+
+        schedule = get_schedule(schedule_id)
+
+        if schedule is None:
+            await interaction.response.send_message(
+                "❌ Schedule not found.",
+                ephemeral=True
+            )
+            return
+
+        if schedule["status"] != "open":
+            await interaction.response.send_message(
+                "⚠️ This registration is not currently open.",
+                ephemeral=True
+            )
+            return
+
+        await self.close_registration(schedule)
+
+        await interaction.response.send_message(
+            f"🔒 Registration `{schedule_id}` closed.",
+            ephemeral=True
+        )
+
+
+async def setup(bot):
+    await bot.add_cog(
+        RegistrationScheduler(bot)
+    )
