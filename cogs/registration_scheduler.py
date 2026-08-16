@@ -298,26 +298,26 @@ class ScheduleModal(discord.ui.Modal):
         max_length=100
     )
 
-    open_date = discord.ui.TextInput(
-        label="Opening date - KSA",
-        placeholder="DD/MM/YYYY",
-        required=True,
-        max_length=10
-    )
+    date = discord.ui.TextInput(
+    label="Date - KSA",
+    placeholder="DD/MM/YYYY",
+    required=True,
+    max_length=10
+)
 
-    open_time = discord.ui.TextInput(
-        label="Opening time - KSA",
-        placeholder="20:00",
-        required=True,
-        max_length=5
-    )
+open_time = discord.ui.TextInput(
+    label="Opening Time - KSA",
+    placeholder="HH:MM",
+    required=True,
+    max_length=5
+)
 
-    close_datetime = discord.ui.TextInput(
-        label="Closing date & time - KSA",
-        placeholder="DD/MM/YYYY HH:MM",
-        required=True,
-        max_length=16
-    )
+close_time = discord.ui.TextInput(
+    label="Closing Time - KSA",
+    placeholder="HH:MM",
+    required=True,
+    max_length=5
+)
 
     message = discord.ui.TextInput(
         label="Opening message",
@@ -334,15 +334,15 @@ class ScheduleModal(discord.ui.Modal):
 
         try:
 
-            opening = parse_ksa(
-                self.open_date.value,
-                self.open_time.value
-            )
+           opening = parse_ksa(
+    self.date.value,
+    self.open_time.value
+)
 
-            closing = datetime.strptime(
-                self.close_datetime.value.strip(),
-                "%d/%m/%Y %H:%M"
-            ).replace(
+closing = parse_ksa(
+    self.date.value,
+    self.close_time.value
+) .replace(
                 tzinfo=KSA
             )
 
@@ -613,13 +613,20 @@ class CloseModal(discord.ui.Modal):
         self.channel = channel
         self.role = role
 
-    close_datetime = discord.ui.TextInput(
-        label="Closing date & time - KSA",
-        placeholder="DD/MM/YYYY HH:MM",
-        required=True,
-        max_length=16
-    )
+    
+close_date = discord.ui.TextInput(
+    label="Date - KSA",
+    placeholder="DD/MM/YYYY",
+    required=True,
+    max_length=10
+)
 
+close_time = discord.ui.TextInput(
+    label="Closing Time - KSA",
+    placeholder="HH:MM",
+    required=True,
+    max_length=5
+)
     message = discord.ui.TextInput(
         label="Closing message",
         placeholder="Write the closing message",
@@ -635,10 +642,10 @@ class CloseModal(discord.ui.Modal):
 
         try:
 
-            closing = datetime.strptime(
-                self.close_datetime.value.strip(),
-                "%d/%m/%Y %H:%M"
-            ).replace(
+          closing = parse_ksa(
+    self.close_date.value,
+    self.close_time.value
+) .replace(
                 tzinfo=KSA
             )
 
