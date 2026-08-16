@@ -10,10 +10,6 @@ from config import TOKEN
 from database.schema import create_tables
 
 
-# =========================
-# SERVER ID
-# =========================
-
 GUILD_ID = 1142434590980571217
 
 
@@ -50,12 +46,14 @@ intents.message_content = True
 
 
 # =========================
-# BOT CLASS
+# BOT
 # =========================
 
 class GenraBot(commands.Bot):
 
     async def setup_hook(self):
+
+        print("===== SETUP HOOK STARTED =====")
 
         # =========================
         # DATABASE
@@ -67,7 +65,7 @@ class GenraBot(commands.Bot):
 
         except Exception as error:
             print("Database error:")
-            print(error)
+            print(repr(error))
 
         # =========================
         # LOAD COGS
@@ -100,7 +98,7 @@ class GenraBot(commands.Bot):
                 )
 
         # =========================
-        # GUILD SYNC
+        # SYNC COMMANDS
         # =========================
 
         try:
@@ -126,13 +124,8 @@ class GenraBot(commands.Bot):
 
         except Exception as error:
 
-            print(
-                "GUILD SYNC ERROR:"
-            )
-
-            print(
-                repr(error)
-            )
+            print("GUILD SYNC ERROR:")
+            print(repr(error))
 
 
 # =========================
@@ -146,7 +139,7 @@ bot = GenraBot(
 
 
 # =========================
-# BOT READY
+# READY
 # =========================
 
 @bot.event
@@ -183,16 +176,11 @@ async def ping(
 
 
 # =========================
-# START BOT
+# START
 # =========================
 
 if __name__ == "__main__":
 
     web_thread = Thread(
         target=run_web,
-        daemon=True
-    )
-
-    web_thread.start()
-
-    bot.run(TOKEN)
+        daemon
