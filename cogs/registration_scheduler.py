@@ -17,38 +17,35 @@ from database.schema import (
 KSA = ZoneInfo("Asia/Riyadh")
 
 
-def is_staff(member: discord.Member):
+def is_admin(member: discord.Member) -> bool:
     return member.guild_permissions.administrator
 
 
-def format_datetime(dt):
-    return dt.strftime("%d/%m/%Y %H:%M KSA")
+def format_ksa(dt: datetime) -> str:
+    return dt.astimezone(KSA).strftime("%d/%m/%Y %H:%M KSA")
 
 
-class ScheduleSetupView(discord.ui.View):
+class ScheduleView(discord.ui.View):
 
     def __init__(self, cog):
         super().__init__(timeout=300)
-
         self.cog = cog
         self.channels = []
         self.role = None
 
     @discord.ui.select(
         cls=discord.ui.ChannelSelect,
+        channel_types=[discord.ChannelType.text],
         placeholder="Select registration channels",
         min_values=1,
-        max_values=25,
-        channel_types=[
-            discord.ChannelType.text
-        ]
+        max_values=25
     )
     async def channel_select(
         self,
         interaction: discord.Interaction,
         select: discord.ui.ChannelSelect
     ):
-        self.channels = select.values
+        self.channels = list(select.values)
 
         await interaction.response.send_message(
             f"✅ Selected {len(self.channels)} channel(s).",
@@ -84,14 +81,14 @@ class ScheduleSetupView(discord.ui.View):
     ):
         if not self.channels:
             await interaction.response.send_message(
-                "❌ Please select at least one registration channel.",
+                "❌ Select at least one channel.",
                 ephemeral=True
             )
             return
 
-        if not self.role:
+        if self.role is None:
             await interaction.response.send_message(
-                "❌ Please select a role.",
+                "❌ Select a role to mention.",
                 ephemeral=True
             )
             return
@@ -116,35 +113,35 @@ class ScheduleModal(discord.ui.Modal):
         self.channels = channels
         self.role = role
 
-    name = discord.ui.TextInput(
+    registration_name = discord.ui.TextInput(
         label="Registration name",
         placeholder="Example: CLASH REGISTRATION",
         required=True,
         max_length=100
     )
 
-    date = discord.ui.TextInput(
+    opening_date = discord.ui.TextInput(
         label="Opening date",
         placeholder="DD/MM/YYYY",
         required=True,
         max_length=10
     )
 
-    time = discord.ui.TextInput(
+    opening_time = discord.ui.TextInput(
         label="Opening time - KSA",
         placeholder="20:00",
         required=True,
         max_length=5
     )
 
-    close_time = discord.ui.TextInput(
-        label="Closing time - KSA (optional)",
+    closing_time = discord.ui.TextInput(
+        label="Closing time - KSA",
         placeholder="23:00",
-        required=False,
+        required=True,
         max_length=5
     )
 
-    message = discord.ui.TextInput(
+    opening_message = discord.ui.TextInput(
         label="Opening message",
         placeholder="Registration is now OPEN!",
         style=discord.TextStyle.paragraph,
@@ -157,67 +154,47 @@ class ScheduleModal(discord.ui.Modal):
         interaction: discord.Interaction
     ):
         try:
-            open_date = datetime.strptime(
-                self.date.value.strip(),
+            date_value = datetime.strptime(
+                self.opening_date.value.strip(),
                 "%d/%m/%Y"
             )
 
-            open_time = datetime.strptime(
-                self.time.value.strip(),
+            open_time_value = datetime.strptime(
+                self.opening_time.value.strip(),
                 "%H:%M"
             )
 
-            open_datetime = datetime(
-                open_date.year,
-                open_date.month,
-                open_date.day,
-                open_time.hour,
-                open_time.minute,
-                tzinfo=KSA
+            close_time_value = datetime.strptime(
+                self.closing_time.value.strip(),
+                "%H:%M"
             )
 
         except ValueError:
             await interaction.response.send_message(
-                "❌ Invalid date/time.\n\n"
-                "Use:\n"
-                "`DD/MM/YYYY`\n"
-                "`HH:MM`",
+                "❌ Invalid date or time.\n\n"
+                "Date: `DD/MM/YYYY`\n"
+                "Time: `HH:MM`",
                 ephemeral=True
             )
             return
 
-        close_datetime = None
+        open_datetime = datetime(
+            date_value.year,
+            date_value.month,
+            date_value.day,
+            open_time_value.hour,
+            open_time_value.minute,
+            tzinfo=KSA
+        )
 
-        if self.close_time.value.strip():
-
-            try:
-                close_time = datetime.strptime(
-                    self.close_time.value.strip(),
-                    "%H:%M"
-                )
-
-                close_datetime = datetime(
-                    open_date.year,
-                    open_date.month,
-                    open_date.day,
-                    close_time.hour,
-                    close_time.minute,
-                    tzinfo=KSA
-                )
-
-                if close_datetime <= open_datetime:
-                    await interaction.response.send_message(
-                        "❌ Closing time must be after opening time.",
-                        ephemeral=True
-                    )
-                    return
-
-            except ValueError:
-                await interaction.response.send_message(
-                    "❌ Invalid closing time. Use `HH:MM`.",
-                    ephemeral=True
-                )
-                return
+        close_datetime = datetime(
+            date_value.year,
+            date_value.month,
+            date_value.day,
+            close_time_value.hour,
+            close_time_value.minute,
+            tzinfo=KSA
+        )
 
         now = datetime.now(KSA)
 
@@ -228,31 +205,28 @@ class ScheduleModal(discord.ui.Modal):
             )
             return
 
+        if close_datetime <= open_datetime:
+            await interaction.response.send_message(
+                "❌ Closing time must be after opening time.",
+                ephemeral=True
+            )
+            return
+
         schedule_id = create_schedule(
-            name=self.name.value.strip(),
+            name=self.registration_name.value.strip(),
             channel_ids=[
                 channel.id
                 for channel in self.channels
             ],
             role_id=self.role.id,
             open_datetime=open_datetime.isoformat(),
-            close_datetime=(
-                close_datetime.isoformat()
-                if close_datetime
-                else None
-            ),
-            message=self.message.value.strip()
+            close_datetime=close_datetime.isoformat(),
+            message=self.opening_message.value.strip()
         )
 
-        channel_text = "\n".join(
-            f"• {channel.mention}"
+        channels_text = "\n".join(
+            channel.mention
             for channel in self.channels
-        )
-
-        close_text = (
-            format_datetime(close_datetime)
-            if close_datetime
-            else "Not scheduled"
         )
 
         embed = discord.Embed(
@@ -262,31 +236,31 @@ class ScheduleModal(discord.ui.Modal):
 
         embed.add_field(
             name="Registration",
-            value=self.name.value,
+            value=self.registration_name.value,
             inline=False
         )
 
         embed.add_field(
             name="Opening",
-            value=format_datetime(open_datetime),
+            value=format_ksa(open_datetime),
             inline=True
         )
 
         embed.add_field(
             name="Closing",
-            value=close_text,
+            value=format_ksa(close_datetime),
             inline=True
         )
 
         embed.add_field(
-            name="Mention",
+            name="Mention Role",
             value=self.role.mention,
             inline=False
         )
 
         embed.add_field(
             name="Channels",
-            value=channel_text,
+            value=channels_text,
             inline=False
         )
 
@@ -316,7 +290,6 @@ class RegistrationScheduler(commands.Cog):
             return
 
         schedules = get_active_schedules()
-
         now = datetime.now(KSA)
 
         for schedule in schedules:
@@ -326,23 +299,12 @@ class RegistrationScheduler(commands.Cog):
                     schedule["open_datetime"]
                 )
 
-                if open_datetime.tzinfo is None:
-                    open_datetime = open_datetime.replace(
-                        tzinfo=KSA
-                    )
-
                 close_datetime = None
 
                 if schedule["close_datetime"]:
-
                     close_datetime = datetime.fromisoformat(
                         schedule["close_datetime"]
                     )
-
-                    if close_datetime.tzinfo is None:
-                        close_datetime = close_datetime.replace(
-                            tzinfo=KSA
-                        )
 
                 if (
                     schedule["status"] == "scheduled"
@@ -352,5 +314,245 @@ class RegistrationScheduler(commands.Cog):
 
                 elif (
                     schedule["status"] == "open"
-                    and close_datetime
+                    and close_datetime is not None
                     and now >= close_datetime
+                ):
+                    await self.close_registration(schedule)
+
+            except Exception as error:
+                print(
+                    f"Scheduler error for "
+                    f"{schedule['id']}: {error}"
+                )
+
+    @scheduler_loop.before_loop
+    async def before_scheduler(self):
+        await self.bot.wait_until_ready()
+
+    async def get_channels(self, schedule):
+
+        channels = []
+
+        for channel_id in schedule["channel_ids"].split(","):
+
+            channel = self.bot.get_channel(
+                int(channel_id)
+            )
+
+            if channel is not None:
+                channels.append(channel)
+
+        return channels
+
+    async def open_registration(self, schedule):
+
+        channels = await self.get_channels(schedule)
+
+        if not channels:
+            print(
+                f"No channels found for schedule "
+                f"{schedule['id']}"
+            )
+            return
+
+        guild = channels[0].guild
+
+        role = guild.get_role(
+            int(schedule["role_id"])
+        )
+
+        if role is None:
+            print(
+                f"Role not found for schedule "
+                f"{schedule['id']}"
+            )
+            return
+
+        for channel in channels:
+
+            try:
+                await channel.set_permissions(
+                    guild.default_role,
+                    send_messages=False
+                )
+
+                await channel.set_permissions(
+                    role,
+                    view_channel=True,
+                    send_messages=True
+                )
+
+                message = schedule["message"]
+
+                message = message.replace(
+                    "{role}",
+                    role.mention
+                )
+
+                message = message.replace(
+                    "{name}",
+                    schedule["name"]
+                )
+
+                message = message.replace(
+                    "{channels}",
+                    " ".join(
+                        channel.mention
+                        for channel in channels
+                    )
+                )
+
+                await channel.send(
+                    content=f"{role.mention}\n{message}",
+                    allowed_mentions=discord.AllowedMentions(
+                        roles=[role]
+                    )
+                )
+
+            except Exception as error:
+                print(
+                    f"Error opening channel "
+                    f"{channel.id}: {error}"
+                )
+
+        update_status(
+            schedule["id"],
+            "open"
+        )
+
+        print(
+            f"Registration {schedule['id']} opened."
+        )
+
+    async def close_registration(self, schedule):
+
+        channels = await self.get_channels(schedule)
+
+        if not channels:
+            return
+
+        guild = channels[0].guild
+
+        role = guild.get_role(
+            int(schedule["role_id"])
+        )
+
+        for channel in channels:
+
+            try:
+
+                if role is not None:
+                    await channel.set_permissions(
+                        role,
+                        send_messages=False
+                    )
+
+                await channel.send(
+                    "🔒 **Registration is now CLOSED.**"
+                )
+
+            except Exception as error:
+                print(
+                    f"Error closing channel "
+                    f"{channel.id}: {error}"
+                )
+
+        update_status(
+            schedule["id"],
+            "closed"
+        )
+
+        print(
+            f"Registration {schedule['id']} closed."
+        )
+
+    @app_commands.command(
+        name="schedule",
+        description="Schedule a registration."
+    )
+    async def schedule(
+        self,
+        interaction: discord.Interaction
+    ):
+
+        if not isinstance(
+            interaction.user,
+            discord.Member
+        ):
+            return
+
+        if not is_admin(interaction.user):
+            await interaction.response.send_message(
+                "❌ Only members with **Administrator** permission "
+                "can use this command.",
+                ephemeral=True
+            )
+            return
+
+        embed = discord.Embed(
+            title="📅 Registration Scheduler",
+            description=(
+                "Create a new registration schedule.\n\n"
+                "**Step 1:** Select one or more channels.\n"
+                "**Step 2:** Select the role to mention.\n"
+                "**Step 3:** Press Continue.\n"
+                "**Step 4:** Enter the date, KSA times and message."
+            ),
+            color=discord.Color.blurple()
+        )
+
+        await interaction.response.send_message(
+            embed=embed,
+            view=ScheduleView(self),
+            ephemeral=True
+        )
+
+    @app_commands.command(
+        name="schedules",
+        description="View registration schedules."
+    )
+    async def schedules(
+        self,
+        interaction: discord.Interaction
+    ):
+
+        if not isinstance(
+            interaction.user,
+            discord.Member
+        ):
+            return
+
+        if not is_admin(interaction.user):
+            await interaction.response.send_message(
+                "❌ Only members with **Administrator** permission "
+                "can use this command.",
+                ephemeral=True
+            )
+            return
+
+        schedules = get_active_schedules()
+
+        if not schedules:
+            await interaction.response.send_message(
+                "📭 No scheduled registrations.",
+                ephemeral=True
+            )
+            return
+
+        embed = discord.Embed(
+            title="📅 Registration Schedules",
+            color=discord.Color.blurple()
+        )
+
+        for schedule in schedules:
+
+            open_datetime = datetime.fromisoformat(
+                schedule["open_datetime"]
+            )
+
+            close_datetime = datetime.fromisoformat(
+                schedule["close_datetime"]
+            )
+
+            value = (
+                f"**Status:** {schedule['status'].upper()
