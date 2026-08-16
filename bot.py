@@ -10,7 +10,7 @@ from config import TOKEN
 
 
 # =========================
-# WEB SERVER
+# RENDER WEB SERVER
 # =========================
 
 app = Flask(__name__)
@@ -23,6 +23,7 @@ def home():
 
 def run_web():
     port = int(os.environ.get("PORT", 10000))
+
     app.run(
         host="0.0.0.0",
         port=port
@@ -44,7 +45,7 @@ STAFF_ROLE_IDS = {
 
 
 # =========================
-# DISCORD
+# DISCORD INTENTS
 # =========================
 
 intents = discord.Intents.default()
@@ -66,35 +67,35 @@ bot = commands.Bot(
 
 def is_staff(member):
 
-    for role in member.roles:
+    if member.guild_permissions.administrator:
+        return True
 
-        if role.id in STAFF_ROLE_IDS:
-            return True
-
-    return False
+    return any(
+        role.id in STAFF_ROLE_IDS
+        for role in member.roles
+    )
 
 
 # =========================
-# READY
+# BOT READY
 # =========================
 
 @bot.event
 async def on_ready():
 
-    print("================================")
+    print("==============================")
     print("GENRA BOT STARTING")
-    print("================================")
+    print("==============================")
 
     print(f"Logged in as: {bot.user}")
     print(f"Bot ID: {bot.user.id}")
 
-    print("Staff roles:")
+    print("Staff role IDs:")
 
     for role_id in STAFF_ROLE_IDS:
         print(role_id)
 
     try:
-
         synced = await bot.tree.sync()
 
         print(
@@ -104,15 +105,15 @@ async def on_ready():
     except Exception as error:
 
         print(
-            f"Slash command sync error: {error}"
+            f"Command sync error: {error}"
         )
 
     print("Genra Bot is Online!")
-    print("================================")
+    print("==============================")
 
 
 # =========================
-# PING
+# PING COMMAND
 # =========================
 
 @bot.tree.command(
@@ -144,12 +145,12 @@ async def ping(
 
 
 # =========================
-# MY ROLES
+# MY ROLES COMMAND
 # =========================
 
 @bot.tree.command(
     name="myroles",
-    description="Check your roles"
+    description="Check your Discord roles"
 )
 async def myroles(
     interaction: discord.Interaction
@@ -160,28 +161,34 @@ async def myroles(
         for role in interaction.user.roles
     ]
 
-    staff = is_staff(
+    role_names = [
+        role.name
+        for role in interaction.user.roles
+    ]
+
+    staff_detected = is_staff(
         interaction.user
     )
 
-    text = (
-        "**Your role IDs:**\n"
+    message = (
+        "**Your roles:**\n"
         + "\n".join(
-            str(role_id)
-            for role_id in role_ids
+            f"- {name} → `{role_id}`"
+            for name, role_id
+            in zip(role_names, role_ids)
         )
         + "\n\n"
-        f"**Staff detected:** {staff}"
+        f"**Staff detected:** `{staff_detected}`"
     )
 
     await interaction.response.send_message(
-        text,
+        message,
         ephemeral=True
     )
 
 
 # =========================
-# START
+# START BOT
 # =========================
 
 if __name__ == "__main__":
