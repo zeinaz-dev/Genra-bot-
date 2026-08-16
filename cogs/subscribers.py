@@ -1,111 +1,99 @@
-import discord
-from discord.ext import commands
 import sqlite3
+
+import discord
+from discord import app_commands
+from discord.ext import commands
+
 from database.schema import DATABASE
+from utils.permissions import (
+    STAFF_ROLE_IDS,
+    PACKAGE_ROLES
+)
 
 
 class Subscribers(commands.Cog):
+
     def __init__(self, bot):
         self.bot = bot
 
-
-    @discord.app_commands.command(
-        name="subscribe",
-        description="Register yourself as a Genra subscriber"
-    )
-    @discord.app_commands.describe(
-        pack="Choose your package"
-    )
-    async def subscribe(
-        self,
-        interaction: discord.Interaction,
-        pack: str
-    ):
-        pack = pack.upper()
-
-        connection = sqlite3.connect(DATABASE)
-        cursor = connection.cursor()
-
-        cursor.execute(
-            "SELECT name FROM packs WHERE name = ?",
-            (pack,)
-        )
-
-        result = cursor.fetchone()
-
-        if not result:
-            connection.close()
-
-            await interaction.response.send_message(
-                "Invalid package. Use CLASH, EMPIRE or TRAINING.",
-                ephemeral=True
-            )
-            return
-
-        cursor.execute(
-            """
-            SELECT id
-            FROM subscribers
-            WHERE discord_id = ? AND pack = ?
-            """,
-            (interaction.user.id, pack)
-        )
-
-        if cursor.fetchone():
-            connection.close()
-
-            await interaction.response.send_message(
-                "You are already subscribed to this package.",
-                ephemeral=True
-            )
-            return
-
-        cursor.execute(
-            """
-            INSERT INTO subscribers (
-                discord_id,
-                username,
-                pack
-            )
-            VALUES (?, ?, ?)
-            """,
-            (
-                interaction.user.id,
-                str(interaction.user),
-                pack
-            )
-        )
-
-        connection.commit()
-        connection.close()
-
-        await interaction.response.send_message(
-            f"Subscription confirmed for **{pack}**.",
-            ephemeral=True
-        )
-
-
-    @discord.app_commands.command(
+    @app_commands.command(
         name="subscribers",
-        description="Show subscriber count"
+        description="Show Genra subscribers"
     )
     async def subscribers(
         self,
         interaction: discord.Interaction
     ):
+
+        if not any(
+            role.id in STAFF_ROLE_IDS
+            for role in interaction.user.roles
+        ):
+            await interaction.response.send_message(
+                "❌ Staff only.",
+                ephemeral=True
+            )
+            return
+
         connection = sqlite3.connect(DATABASE)
         cursor = connection.cursor()
 
-        cursor.execute(
-            "SELECT COUNT(*) FROM subscribers"
+        embed = discord.Embed(
+            title="GENRA SUBSCRIBERS",
+            color=discord.Color.blue()
         )
 
-        count = cursor.fetchone()[0]
+        for package, role_id in PACKAGE_ROLES.items():
 
+            role = interaction.guild.get_role(
+                role_id
+            )
+
+            if role is None:
+                continue
+
+            members = role.members
+
+            lines = []
+
+            for member in members:
+                lines.append(
+                    member.mention
+                )
+
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO role_history
+                    (
+                        discord_id,
+                        role_id,
+                        package
+                    )
+                    VALUES (?, ?, ?)
+                    """,
+                    (
+                        member.id,
+                        role_id,
+                        package
+                    )
+                )
+
+            if not lines:
+                lines.append(
+                    "No subscribers."
+                )
+
+            embed.add_field(
+                name=f"{package} — {len(members)}",
+                value="\n".join(lines),
+                inline=False
+            )
+
+        connection.commit()
         connection.close()
 
         await interaction.response.send_message(
-            f"Total subscribers: **{count}**"
+            embed=embed
         )
 
 
