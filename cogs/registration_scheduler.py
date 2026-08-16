@@ -319,7 +319,6 @@ class ScheduleView(discord.ui.View):
             value=format_ksa(close_datetime),
             inline=True,
         )
-
         embed.add_field(
             name="Mention Role",
             value=self.role.mention,
