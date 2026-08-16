@@ -143,8 +143,52 @@ class ScheduleView(discord.ui.View):
 
     @discord.ui.select(
         cls=discord.ui.RoleSelect,
-        placeholder="Select the role to mention
-        class ScheduleModal(discord.ui.Modal):
+        placeholder="Select the role to mention",
+        min_values=1,
+        max_values=1,
+    )
+    async def role_select(
+        self,
+        interaction: discord.Interaction,
+        select: discord.ui.RoleSelect,
+    ):
+        self.role = select.values[0]
+
+        await interaction.response.send_message(
+            f"✅ Selected role: {self.role.mention}",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(
+        label="Continue",
+        style=discord.ButtonStyle.green,
+    )
+    async def continue_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ):
+        if not self.channels:
+            await interaction.response.send_message(
+                "❌ Select at least one channel.",
+                ephemeral=True,
+            )
+            return
+
+        if self.role is None:
+            await interaction.response.send_message(
+                "❌ Select a role to mention.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.send_modal(
+            ScheduleModal(
+                self.cog,
+                self.channels,
+                self.role,
+            )
+        )class ScheduleModal(discord.ui.Modal):
 
     def __init__(self, cog, channels, role):
         super().__init__(
@@ -319,6 +363,7 @@ class ScheduleView(discord.ui.View):
             value=format_ksa(close_datetime),
             inline=True,
         )
+
         embed.add_field(
             name="Mention Role",
             value=self.role.mention,
@@ -560,8 +605,7 @@ class IndependentCloseModal(discord.ui.Modal):
         await interaction.response.send_message(
             embed=embed,
             ephemeral=True,
-        )
-        class RegistrationScheduler(commands.Cog):
+        )class RegistrationScheduler(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
@@ -835,8 +879,7 @@ class IndependentCloseModal(discord.ui.Modal):
 
         print(
             f"🟢 Schedule {schedule['id']} opened."
-        )
-            async def close_registration(
+        )    async def close_registration(
         self,
         schedule,
     ):
