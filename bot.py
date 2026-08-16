@@ -10,9 +10,6 @@ from config import TOKEN
 from database.schema import create_tables
 
 
-GUILD_ID = 1142434590980571217
-
-
 # =========================
 # RENDER WEB SERVER
 # =========================
@@ -72,8 +69,6 @@ class GenraBot(commands.Bot):
 
         cogs = [
             "cogs.packs",
-            "cogs.subscribers",
-            "cogs.teams",
             "cogs.scheduler"
         ]
 
@@ -93,15 +88,10 @@ class GenraBot(commands.Bot):
 
         try:
 
-            guild = discord.Object(id=GUILD_ID)
-
-            synced = await self.tree.sync(
-                guild=guild
-            )
+            synced = await self.tree.sync()
 
             print(
-                f"Synced {len(synced)} commands "
-                f"to server {GUILD_ID}"
+                f"Synced {len(synced)} commands."
             )
 
             for command in synced:
@@ -111,7 +101,7 @@ class GenraBot(commands.Bot):
 
         except Exception as error:
 
-            print("GUILD SYNC ERROR:")
+            print("SYNC ERROR:")
             print(repr(error))
 
 
