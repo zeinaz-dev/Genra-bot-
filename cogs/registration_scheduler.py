@@ -211,7 +211,6 @@ def replace_placeholders(
     return message# =========================================================
 # SCHEDULE VIEW
 # =========================================================
-
 class ScheduleView(discord.ui.View):
 
     def __init__(self, cog):
@@ -237,12 +236,9 @@ class ScheduleView(discord.ui.View):
         if not await staff_only(interaction):
             return
 
-        self.channels = list(select.values)
+        self.channels = select.values
 
-        await interaction.response.send_message(
-            f"✅ Selected {len(self.channels)} channel(s).",
-            ephemeral=True,
-        )
+        await interaction.response.defer()
 
     @discord.ui.select(
         cls=discord.ui.RoleSelect,
@@ -261,10 +257,7 @@ class ScheduleView(discord.ui.View):
 
         self.role = select.values[0]
 
-        await interaction.response.send_message(
-            f"✅ Selected role: {self.role.mention}",
-            ephemeral=True,
-        )
+        await interaction.response.defer()
 
     @discord.ui.button(
         label="Continue",
@@ -285,26 +278,7 @@ class ScheduleView(discord.ui.View):
                 "❌ Select at least one channel.",
                 ephemeral=True,
             )
-
-            return
-
-        if self.role is None:
-
-            await interaction.response.send_message(
-                "❌ Select a role to mention.",
-                ephemeral=True,
-            )
-
-            return
-
-        await interaction.response.send_modal(
-            ScheduleModal(
-                self.cog,
-                self.channels,
-                self.role,
-            )
-        )
-
+           
 
 # =========================================================
 # SCHEDULE MODAL
