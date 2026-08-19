@@ -236,9 +236,12 @@ class ScheduleView(discord.ui.View):
         if not await staff_only(interaction):
             return
 
-        self.channels = select.values
+        self.channels = list(select.values)
 
-        await interaction.response.defer()
+        await interaction.response.send_message(
+            f"✅ Selected {len(self.channels)} channel(s).",
+            ephemeral=True,
+        )
 
     @discord.ui.select(
         cls=discord.ui.RoleSelect,
@@ -257,7 +260,10 @@ class ScheduleView(discord.ui.View):
 
         self.role = select.values[0]
 
-        await interaction.response.defer()
+        await interaction.response.send_message(
+            f"✅ Selected role: {self.role.mention}",
+            ephemeral=True,
+        )
 
     @discord.ui.button(
         label="Continue",
@@ -278,7 +284,36 @@ class ScheduleView(discord.ui.View):
                 "❌ Select at least one channel.",
                 ephemeral=True,
             )
-           
+
+            return
+
+        if self.role is None:
+
+            await interaction.response.send_message(
+                "❌ Select a role to mention.",
+                ephemeral=True,
+            )
+
+            return
+
+        await interaction.response.send_modal(
+            ScheduleModal(
+                self.cog,
+                self.channels,
+                self.role,
+            )
+        )
+        async def on_error(
+    self,
+    interaction: discord.Interaction,
+    error: Exception,
+    item,
+):
+
+    import traceback
+
+    print("❌ ScheduleView ERROR")
+    traceback.print_exc()
 
 # =========================================================
 # SCHEDULE MODAL
@@ -505,7 +540,33 @@ class ScheduleModal(discord.ui.Modal):
         await interaction.response.send_message(
             embed=embed,
             ephemeral=True,
-        )# =========================================================
+        )
+        async def on_error(
+    self,
+    interaction: discord.Interaction,
+    error: Exception,
+):
+
+    import traceback
+
+    print("❌ ScheduleModal ERROR")
+    traceback.print_exc()
+
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                f"❌ Error: {error}",
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                f"❌ Error: {error}",
+                ephemeral=True,
+            )
+    except Exception:
+        pass
+        
+# =========================================================
 # INDEPENDENT CLOSE VIEW
 # =========================================================
 
