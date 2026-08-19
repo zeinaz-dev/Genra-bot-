@@ -389,14 +389,11 @@ class ScheduleModal(discord.ui.Modal):
                 "%H:%M",
             )
 
-            closing_date_value = datetime.strptime(
-                self.closing_date.value.strip(),
-                "%d/%m/%Y",
-            )
-
-            closing_time_value = datetime.strptime(
-                self.closing_time.value.strip(),
-                "%H:%M",
+            closing_datetime = discord.ui.TextInput(
+              label="Closing date & time - KSA",
+              placeholder="DD/MM/YYYY HH:MM",
+              required=True,
+             max_length=16,
             )
 
         except ValueError:
