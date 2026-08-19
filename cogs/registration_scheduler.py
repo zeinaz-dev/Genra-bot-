@@ -211,7 +211,7 @@ def replace_placeholders(
     return message# =========================================================
 # SCHEDULE VIEW
 # =========================================================
-class ScheduleView(discord.ui.View):
+    class ScheduleView(discord.ui.View):
 
     def __init__(self, cog):
         super().__init__(timeout=300)
@@ -236,12 +236,9 @@ class ScheduleView(discord.ui.View):
         if not await staff_only(interaction):
             return
 
-        self.channels = list(select.values)
+        self.channels = select.values
 
-        await interaction.response.send_message(
-            f"✅ Selected {len(self.channels)} channel(s).",
-            ephemeral=True,
-        )
+        await interaction.response.defer()
 
     @discord.ui.select(
         cls=discord.ui.RoleSelect,
@@ -260,10 +257,7 @@ class ScheduleView(discord.ui.View):
 
         self.role = select.values[0]
 
-        await interaction.response.send_message(
-            f"✅ Selected role: {self.role.mention}",
-            ephemeral=True,
-        )
+        await interaction.response.defer()
 
     @discord.ui.button(
         label="Continue",
@@ -279,21 +273,17 @@ class ScheduleView(discord.ui.View):
             return
 
         if not self.channels:
-
             await interaction.response.send_message(
                 "❌ Select at least one channel.",
                 ephemeral=True,
             )
-
             return
 
         if self.role is None:
-
             await interaction.response.send_message(
                 "❌ Select a role to mention.",
                 ephemeral=True,
             )
-
             return
 
         await interaction.response.send_modal(
@@ -303,17 +293,17 @@ class ScheduleView(discord.ui.View):
                 self.role,
             )
         )
-        async def on_error(
-    self,
-    interaction: discord.Interaction,
-    error: Exception,
-    item,
-):
 
-    import traceback
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+        item,
+    ):
+        import traceback
 
-    print("❌ ScheduleView ERROR")
-    traceback.print_exc()
+        print("❌ ScheduleView ERROR")
+        traceback.print_exc()
 
 # =========================================================
 # SCHEDULE MODAL
@@ -327,7 +317,6 @@ class ScheduleModal(discord.ui.Modal):
         channels,
         role,
     ):
-
         super().__init__(
             title="Create Registration Schedule"
         )
@@ -417,7 +406,6 @@ class ScheduleModal(discord.ui.Modal):
                 "Time format: `HH:MM`",
                 ephemeral=True,
             )
-
             return
 
         open_datetime = datetime(
@@ -441,22 +429,17 @@ class ScheduleModal(discord.ui.Modal):
         now = datetime.now(KSA)
 
         if open_datetime <= now:
-
             await interaction.response.send_message(
                 "❌ The opening date/time must be in the future.",
                 ephemeral=True,
             )
-
             return
 
         if close_datetime <= open_datetime:
-
             await interaction.response.send_message(
-                "❌ The closing date/time must be after "
-                "the opening date/time.",
+                "❌ The closing date/time must be after the opening date/time.",
                 ephemeral=True,
             )
-
             return
 
         try:
@@ -475,16 +458,12 @@ class ScheduleModal(discord.ui.Modal):
 
         except Exception as error:
 
-            print(
-                f"❌ Could not create schedule: {error}"
-            )
+            print(f"❌ Could not create schedule: {error}")
 
             await interaction.response.send_message(
-                "❌ Could not create the schedule. "
-                "Check the database.",
+                "❌ Could not create the schedule. Check the database.",
                 ephemeral=True,
             )
-
             return
 
         channels_text = "\n".join(
@@ -523,7 +502,7 @@ class ScheduleModal(discord.ui.Modal):
 
         embed.add_field(
             name="Channels",
-            value=channels_text[:1024],
+            value=channels_text[:1024] if channels_text else "None",
             inline=False,
         )
 
@@ -541,30 +520,31 @@ class ScheduleModal(discord.ui.Modal):
             embed=embed,
             ephemeral=True,
         )
-        async def on_error(
-    self,
-    interaction: discord.Interaction,
-    error: Exception,
-):
 
-    import traceback
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+    ):
+        import traceback
 
-    print("❌ ScheduleModal ERROR")
-    traceback.print_exc()
+        print("❌ ScheduleModal ERROR")
+        traceback.print_exc()
 
-    try:
-        if interaction.response.is_done():
-            await interaction.followup.send(
-                f"❌ Error: {error}",
-                ephemeral=True,
-            )
-        else:
-            await interaction.response.send_message(
-                f"❌ Error: {error}",
-                ephemeral=True,
-            )
-    except Exception:
-        pass
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(
+                    f"❌ Error: {error}",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.response.send_message(
+                    f"❌ Error: {error}",
+                    ephemeral=True,
+                )
+        except Exception:
+            pass
+    
         
 # =========================================================
 # INDEPENDENT CLOSE VIEW
