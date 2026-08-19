@@ -310,21 +310,7 @@ class ScheduleView(discord.ui.View):
 # SCHEDULE MODAL
 # =========================================================
 
-class ScheduleModal(discord.ui.Modal):
-
-    def __init__(
-        self,
-        cog,
-        channels,
-        role,
-    ):
-        super().__init__(
-            title="Create Registration Schedule"
-        )
-
-        self.cog = cog
-        self.channels = channels
-        self.role = role
+class ScheduleModal(discord.ui.Modal, title="Create Registration Schedule"):
 
     registration_name = discord.ui.TextInput(
         label="Registration name",
@@ -347,18 +333,11 @@ class ScheduleModal(discord.ui.Modal):
         max_length=5,
     )
 
-    closing_date = discord.ui.TextInput(
-        label="Closing date",
-        placeholder="DD/MM/YYYY",
+    closing_datetime = discord.ui.TextInput(
+        label="Closing date & time - KSA",
+        placeholder="DD/MM/YYYY HH:MM",
         required=True,
-        max_length=10,
-    )
-
-    closing_time = discord.ui.TextInput(
-        label="Closing time - KSA",
-        placeholder="23:00",
-        required=True,
-        max_length=5,
+        max_length=16,
     )
 
     opening_message = discord.ui.TextInput(
@@ -368,6 +347,18 @@ class ScheduleModal(discord.ui.Modal):
         required=True,
         max_length=1800,
     )
+
+    def __init__(
+        self,
+        cog,
+        channels,
+        role,
+    ):
+        super().__init__()
+
+        self.cog = cog
+        self.channels = channels
+        self.role = role
 
     async def on_submit(
         self,
@@ -389,19 +380,18 @@ class ScheduleModal(discord.ui.Modal):
                 "%H:%M",
             )
 
-            closing_datetime = discord.ui.TextInput(
-              label="Closing date & time - KSA",
-              placeholder="DD/MM/YYYY HH:MM",
-              required=True,
-             max_length=16,
+            closing_datetime_value = datetime.strptime(
+                self.closing_datetime.value.strip(),
+                "%d/%m/%Y %H:%M",
             )
 
         except ValueError:
 
             await interaction.response.send_message(
-                "❌ Invalid date or time.\n\n"
-                "Date format: `DD/MM/YYYY`\n"
-                "Time format: `HH:MM`",
+                "❌ Invalid date or time format.\n\n"
+                "Opening date: `DD/MM/YYYY`\n"
+                "Opening time: `HH:MM`\n"
+                "Closing date & time: `DD/MM/YYYY HH:MM`",
                 ephemeral=True,
             )
             return
@@ -416,17 +406,18 @@ class ScheduleModal(discord.ui.Modal):
         )
 
         close_datetime = datetime(
-            closing_date_value.year,
-            closing_date_value.month,
-            closing_date_value.day,
-            closing_time_value.hour,
-            closing_time_value.minute,
+            closing_datetime_value.year,
+            closing_datetime_value.month,
+            closing_datetime_value.day,
+            closing_datetime_value.hour,
+            closing_datetime_value.minute,
             tzinfo=KSA,
         )
 
         now = datetime.now(KSA)
 
         if open_datetime <= now:
+
             await interaction.response.send_message(
                 "❌ The opening date/time must be in the future.",
                 ephemeral=True,
@@ -434,6 +425,7 @@ class ScheduleModal(discord.ui.Modal):
             return
 
         if close_datetime <= open_datetime:
+
             await interaction.response.send_message(
                 "❌ The closing date/time must be after the opening date/time.",
                 ephemeral=True,
@@ -456,10 +448,13 @@ class ScheduleModal(discord.ui.Modal):
 
         except Exception as error:
 
-            print(f"❌ Could not create schedule: {error}")
+            print(
+                f"❌ Could not create schedule: {error}"
+            )
 
             await interaction.response.send_message(
-                "❌ Could not create the schedule. Check the database.",
+                "❌ Could not create the schedule. "
+                "Check the database.",
                 ephemeral=True,
             )
             return
@@ -500,7 +495,11 @@ class ScheduleModal(discord.ui.Modal):
 
         embed.add_field(
             name="Channels",
-            value=channels_text[:1024] if channels_text else "None",
+            value=(
+                channels_text[:1024]
+                if channels_text
+                else "None"
+            ),
             inline=False,
         )
 
@@ -524,24 +523,39 @@ class ScheduleModal(discord.ui.Modal):
         interaction: discord.Interaction,
         error: Exception,
     ):
+
         import traceback
 
         print("❌ ScheduleModal ERROR")
         traceback.print_exc()
 
         try:
+
             if interaction.response.is_done():
+
                 await interaction.followup.send(
                     f"❌ Error: {error}",
                     ephemeral=True,
                 )
+
             else:
+
                 await interaction.response.send_message(
                     f"❌ Error: {error}",
                     ephemeral=True,
                 )
+
         except Exception:
-            pass
+            pass        
+        
+
+        
+
+            
+    
+
+
+
     
         
 # =========================================================
