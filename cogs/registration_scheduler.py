@@ -16,32 +16,22 @@ from database.schema import (
 
 
 # =========================================================
-# TIMEZONE
+# CONFIGURATION
 # =========================================================
 
 KSA = ZoneInfo("Asia/Riyadh")
 
-
-# =========================================================
-# FILES
-# =========================================================
-
 INDEPENDENT_CLOSE_FILE = "data/independent_closes.json"
+AUTOCLEAR_FILE = "data/autoclear.json"
 
 
 # =========================================================
 # STAFF ROLE IDs
 # =========================================================
 
-CEO_ROLE_ID = 1392127618815627466
 GENRA_TEAM_ROLE_ID = 1392127622430986392
 OPERATION_MANAGER_ROLE_ID = 1392127621420027956
-
-STAFF_ROLE_IDS = {
-    CEO_ROLE_ID,
-    GENRA_TEAM_ROLE_ID,
-    OPERATION_MANAGER_ROLE_ID,
-}
+CEO_ROLE_ID = 1392127618815627466
 
 
 # =========================================================
@@ -81,8 +71,14 @@ def is_staff(interaction: discord.Interaction) -> bool:
     if member.guild_permissions.administrator:
         return True
 
+    allowed_role_ids = {
+        GENRA_TEAM_ROLE_ID,
+        OPERATION_MANAGER_ROLE_ID,
+        CEO_ROLE_ID,
+    }
+
     return any(
-        role.id in STAFF_ROLE_IDS
+        role.id in allowed_role_ids
         for role in member.roles
     )
 
@@ -99,16 +95,21 @@ async def staff_only(
     )
 
     try:
+
         if interaction.response.is_done():
+
             await interaction.followup.send(
                 message,
                 ephemeral=True,
             )
+
         else:
+
             await interaction.response.send_message(
                 message,
                 ephemeral=True,
             )
+
     except Exception:
         pass
 
@@ -116,7 +117,7 @@ async def staff_only(
 
 
 # =========================================================
-# DATE FORMAT
+# FORMAT DATE
 # =========================================================
 
 def format_ksa(dt: datetime) -> str:
@@ -124,6 +125,26 @@ def format_ksa(dt: datetime) -> str:
     return dt.astimezone(KSA).strftime(
         "%d/%m/%Y %H:%M KSA"
     )
+
+
+# =========================================================
+# SAFE ROW ACCESS
+# =========================================================
+#
+# sqlite3.Row does NOT support .get()
+#
+# Always use:
+#     row["column"]
+#
+# This helper is only for optional values.
+# =========================================================
+
+def row_value(row, key, default=None):
+
+    try:
+        return row[key]
+    except (KeyError, IndexError, TypeError):
+        return default
 
 
 # =========================================================
@@ -198,6 +219,77 @@ def save_independent_closes(closes):
 
 
 # =========================================================
+# AUTOCLEAR FILE
+# =========================================================
+
+def load_autoclear_settings():
+
+    os.makedirs(
+        "data",
+        exist_ok=True,
+    )
+
+    if not os.path.exists(
+        AUTOCLEAR_FILE
+    ):
+        return []
+
+    try:
+
+        with open(
+            AUTOCLEAR_FILE,
+            "r",
+            encoding="utf-8",
+        ) as file:
+
+            data = json.load(file)
+
+            if isinstance(data, list):
+                return data
+
+            return []
+
+    except Exception as error:
+
+        print(
+            f"❌ Could not load autoclear settings: "
+            f"{error!r}"
+        )
+
+        return []
+
+
+def save_autoclear_settings(settings):
+
+    os.makedirs(
+        "data",
+        exist_ok=True,
+    )
+
+    try:
+
+        with open(
+            AUTOCLEAR_FILE,
+            "w",
+            encoding="utf-8",
+        ) as file:
+
+            json.dump(
+                settings,
+                file,
+                ensure_ascii=False,
+                indent=4,
+            )
+
+    except Exception as error:
+
+        print(
+            f"❌ Could not save autoclear settings: "
+            f"{error!r}"
+        )
+
+
+# =========================================================
 # PLACEHOLDERS
 # =========================================================
 
@@ -208,7 +300,7 @@ def replace_placeholders(
     channels=None,
 ):
 
-    if not isinstance(message, str):
+    if not message:
         return ""
 
     if role is not None:
@@ -227,14 +319,12 @@ def replace_placeholders(
 
     if channels:
 
-        channel_mentions = " ".join(
-            channel.mention
-            for channel in channels
-        )
-
         message = message.replace(
             "{channels}",
-            channel_mentions,
+            " ".join(
+                channel.mention
+                for channel in channels
+            ),
         )
 
     return message
@@ -245,46 +335,84 @@ def replace_placeholders(
 # =========================================================
 
 async def set_registration_permissions(
-    channel: discord.TextChannel,
-    role: discord.Role,
-    opened: bool,
+    channel,
+    role,
+    can_write,
 ):
-    """
-    CLOSED:
-        @everyone -> cannot view
-        selected role -> can view, cannot write
 
-    OPEN:
-        @everyone -> cannot view
-        selected role -> can view, can write
-    """
+    if channel is None:
+        return False
 
-    guild = channel.guild
-    everyone = guild.default_role
+    if role is None:
+        return False
 
-    await channel.set_permissions(
-        everyone,
-        view_channel=False,
-        reason="Registration room access control",
-    )
+    try:
 
-    if opened:
+        # Do NOT explicitly add @everyone.
+        #
+        # This removes the existing @everyone overwrite,
+        # allowing the server's normal @everyone permissions
+        # to apply.
+        #
+        # The selected registration role is then given the
+        # required visibility/write permissions.
 
-        await channel.set_permissions(
-            role,
-            view_channel=True,
-            send_messages=True,
-            reason="Registration opened",
+        try:
+            await channel.set_permissions(
+                channel.guild.default_role,
+                overwrite=None,
+            )
+        except Exception:
+            pass
+
+        if can_write:
+
+            await channel.set_permissions(
+                role,
+                view_channel=True,
+                send_messages=True,
+                send_messages_in_threads=True,
+                read_message_history=True,
+            )
+
+        else:
+
+            await channel.set_permissions(
+                role,
+                view_channel=True,
+                send_messages=False,
+                send_messages_in_threads=False,
+                read_message_history=True,
+            )
+
+        return True
+
+    except discord.Forbidden:
+
+        print(
+            f"❌ Missing permission to edit "
+            f"#{channel.name}"
         )
 
-    else:
+        return False
 
-        await channel.set_permissions(
-            role,
-            view_channel=True,
-            send_messages=False,
-            reason="Registration closed",
+    except discord.HTTPException as error:
+
+        print(
+            f"❌ Discord error editing "
+            f"#{channel.name}: {error!r}"
         )
+
+        return False
+
+    except Exception as error:
+
+        print(
+            f"❌ Permission error in "
+            f"#{channel.name}: {error!r}"
+        )
+
+        return False
 
 
 # =========================================================
@@ -302,7 +430,6 @@ class ScheduleView(discord.ui.View):
         self.cog = cog
         self.channels = []
         self.role = None
-
 
     @discord.ui.select(
         cls=discord.ui.ChannelSelect,
@@ -324,15 +451,11 @@ class ScheduleView(discord.ui.View):
             select.values
         )
 
-        await interaction.response.send_message(
-            f"✅ Selected {len(self.channels)} channel(s).",
-            ephemeral=True,
-        )
-
+        await interaction.response.defer()
 
     @discord.ui.select(
         cls=discord.ui.RoleSelect,
-        placeholder="Select registration role",
+        placeholder="Select the registration role",
         min_values=1,
         max_values=1,
     )
@@ -347,11 +470,7 @@ class ScheduleView(discord.ui.View):
 
         self.role = select.values[0]
 
-        await interaction.response.send_message(
-            f"✅ Selected role: {self.role.mention}",
-            ephemeral=True,
-        )
-
+        await interaction.response.defer()
 
     @discord.ui.button(
         label="Continue",
@@ -384,55 +503,69 @@ class ScheduleView(discord.ui.View):
 
             return
 
-        try:
-
-            await interaction.response.send_modal(
-                ScheduleModal(
-                    self.cog,
-                    self.channels,
-                    self.role,
-                )
+        await interaction.response.send_modal(
+            ScheduleModal(
+                self.cog,
+                self.channels,
+                self.role,
             )
-
-        except Exception as error:
-
-            print(
-                "❌ Could not open ScheduleModal:"
-            )
-
-            traceback.print_exc()
-
-            if not interaction.response.is_done():
-
-                await interaction.response.send_message(
-                    "❌ Could not open the schedule form.",
-                    ephemeral=True,
-                )
-
+        )
 
     async def on_error(
         self,
-        interaction: discord.Interaction,
-        error: Exception,
+        interaction,
+        error,
         item,
     ):
 
-        print(
-            "❌ ScheduleView ERROR"
-        )
-
-        traceback.print_exception(
-            type(error),
-            error,
-            error.__traceback__,
-        )
+        print("❌ ScheduleView ERROR")
+        traceback.print_exc()
 
 
 # =========================================================
 # SCHEDULE MODAL
 # =========================================================
 
-class ScheduleModal(discord.ui.Modal):
+class ScheduleModal(
+    discord.ui.Modal,
+    title="Create Registration Schedule",
+):
+
+    registration_name = discord.ui.TextInput(
+        label="Registration name",
+        placeholder="Example: CLASH REGISTRATION",
+        required=True,
+        max_length=100,
+    )
+
+    opening_date = discord.ui.TextInput(
+        label="Opening date",
+        placeholder="DD/MM/YYYY",
+        required=True,
+        max_length=10,
+    )
+
+    opening_time = discord.ui.TextInput(
+        label="Opening time - KSA",
+        placeholder="20:00",
+        required=True,
+        max_length=5,
+    )
+
+    closing_datetime = discord.ui.TextInput(
+        label="Closing date & time - KSA",
+        placeholder="DD/MM/YYYY HH:MM",
+        required=True,
+        max_length=16,
+    )
+
+    opening_message = discord.ui.TextInput(
+        label="Opening message",
+        placeholder="Write your message here",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1800,
+    )
 
     def __init__(
         self,
@@ -441,71 +574,11 @@ class ScheduleModal(discord.ui.Modal):
         role,
     ):
 
-        super().__init__(
-            title="Create Registration Schedule"
-        )
+        super().__init__()
 
         self.cog = cog
-        self.channels = list(channels)
+        self.channels = channels
         self.role = role
-
-        self.registration_name = discord.ui.TextInput(
-            label="Registration name",
-            placeholder="Example: CLASH REGISTRATION",
-            required=True,
-            max_length=100,
-        )
-
-        self.opening_date = discord.ui.TextInput(
-            label="Opening date",
-            placeholder="DD/MM/YYYY",
-            required=True,
-            max_length=10,
-        )
-
-        self.opening_time = discord.ui.TextInput(
-            label="Opening time - KSA",
-            placeholder="20:00",
-            required=True,
-            max_length=5,
-        )
-
-        self.closing_time = discord.ui.TextInput(
-            label="Closing time - KSA",
-            placeholder="23:00",
-            required=True,
-            max_length=5,
-        )
-
-        self.opening_message = discord.ui.TextInput(
-            label="Opening message",
-            placeholder="Write your opening message here",
-            style=discord.TextStyle.paragraph,
-            required=True,
-            max_length=1800,
-        )
-
-        self.add_item(
-            self.registration_name
-        )
-
-        self.add_item(
-            self.opening_date
-        )
-
-        self.add_item(
-            self.opening_time
-        )
-
-        self.add_item(
-            self.closing_time
-        )
-
-        self.add_item(
-            self.opening_message
-        )    # =====================================================
-    # SCHEDULE MODAL SUBMIT
-    # =====================================================
 
     async def on_submit(
         self,
@@ -517,7 +590,7 @@ class ScheduleModal(discord.ui.Modal):
 
         try:
 
-            date_value = datetime.strptime(
+            opening_date_value = datetime.strptime(
                 self.opening_date.value.strip(),
                 "%d/%m/%Y",
             )
@@ -527,46 +600,38 @@ class ScheduleModal(discord.ui.Modal):
                 "%H:%M",
             )
 
-            closing_time_value = datetime.strptime(
-                self.closing_time.value.strip(),
-                "%H:%M",
+            closing_datetime_value = datetime.strptime(
+                self.closing_datetime.value.strip(),
+                "%d/%m/%Y %H:%M",
             )
 
         except ValueError:
 
             await interaction.response.send_message(
                 "❌ Invalid date or time format.\n\n"
-                "Date: `DD/MM/YYYY`\n"
+                "Opening date: `DD/MM/YYYY`\n"
                 "Opening time: `HH:MM`\n"
-                "Closing time: `HH:MM`\n\n"
-                "Example:\n"
-                "`25/08/2026`\n"
-                "`20:00`\n"
-                "`23:00`",
+                "Closing date & time: `DD/MM/YYYY HH:MM`",
                 ephemeral=True,
             )
 
             return
 
-        # -------------------------------------------------
-        # SAME DATE FOR OPENING AND CLOSING
-        # -------------------------------------------------
-
         open_datetime = datetime(
-            date_value.year,
-            date_value.month,
-            date_value.day,
+            opening_date_value.year,
+            opening_date_value.month,
+            opening_date_value.day,
             opening_time_value.hour,
             opening_time_value.minute,
             tzinfo=KSA,
         )
 
         close_datetime = datetime(
-            date_value.year,
-            date_value.month,
-            date_value.day,
-            closing_time_value.hour,
-            closing_time_value.minute,
+            closing_datetime_value.year,
+            closing_datetime_value.month,
+            closing_datetime_value.day,
+            closing_datetime_value.hour,
+            closing_datetime_value.minute,
             tzinfo=KSA,
         )
 
@@ -575,38 +640,42 @@ class ScheduleModal(discord.ui.Modal):
         if open_datetime <= now:
 
             await interaction.response.send_message(
-                "❌ The opening date/time must be "
-                "in the future.",
+                "❌ The opening date/time must be in the future.",
                 ephemeral=True,
             )
 
             return
+
+        # Same date is allowed.
+        # Only the actual closing datetime must be
+        # after the opening datetime.
 
         if close_datetime <= open_datetime:
 
             await interaction.response.send_message(
-                "❌ The closing time must be after "
-                "the opening time on the same date.",
+                "❌ The closing date/time must be after "
+                "the opening date/time.",
                 ephemeral=True,
             )
 
             return
-
-        # -------------------------------------------------
-        # DATABASE
-        # -------------------------------------------------
 
         try:
 
             schedule_id = create_schedule(
                 name=self.registration_name.value.strip(),
+
                 channel_ids=[
                     channel.id
                     for channel in self.channels
                 ],
+
                 role_id=self.role.id,
+
                 open_datetime=open_datetime.isoformat(),
+
                 close_datetime=close_datetime.isoformat(),
+
                 message=self.opening_message.value.strip(),
             )
 
@@ -618,16 +687,12 @@ class ScheduleModal(discord.ui.Modal):
             )
 
             await interaction.response.send_message(
-                "❌ Could not create the schedule.\n"
-                "Please check the database.",
+                "❌ Could not create the schedule. "
+                "Check the database.",
                 ephemeral=True,
             )
 
             return
-
-        # -------------------------------------------------
-        # EMBED
-        # -------------------------------------------------
 
         channels_text = "\n".join(
             channel.mention
@@ -684,56 +749,37 @@ class ScheduleModal(discord.ui.Modal):
             ephemeral=True,
         )
 
-
-    # =====================================================
-    # MODAL ERROR
-    # =====================================================
-
     async def on_error(
         self,
-        interaction: discord.Interaction,
-        error: Exception,
+        interaction,
+        error,
     ):
 
-        print(
-            "❌ ScheduleModal ERROR"
-        )
-
-        traceback.print_exception(
-            type(error),
-            error,
-            error.__traceback__,
-        )
+        print("❌ ScheduleModal ERROR")
+        traceback.print_exc()
 
         try:
 
             if interaction.response.is_done():
 
                 await interaction.followup.send(
-                    "❌ An error occurred while creating "
-                    "the schedule.",
+                    f"❌ Error: {error}",
                     ephemeral=True,
                 )
 
             else:
 
                 await interaction.response.send_message(
-                    "❌ An error occurred while creating "
-                    "the schedule.",
+                    f"❌ Error: {error}",
                     ephemeral=True,
                 )
 
         except Exception:
-            pass
-
-
-# =========================================================
+            pass# =========================================================
 # INDEPENDENT CLOSE VIEW
 # =========================================================
 
-class IndependentCloseView(
-    discord.ui.View
-):
+class IndependentCloseView(discord.ui.View):
 
     def __init__(self, cog):
 
@@ -745,11 +791,10 @@ class IndependentCloseView(
         self.channels = []
         self.role = None
 
-
     @discord.ui.select(
         cls=discord.ui.ChannelSelect,
         channel_types=[discord.ChannelType.text],
-        placeholder="Select channels to close",
+        placeholder="Select close channels",
         min_values=1,
         max_values=25,
     )
@@ -766,15 +811,11 @@ class IndependentCloseView(
             select.values
         )
 
-        await interaction.response.send_message(
-            f"✅ Selected {len(self.channels)} channel(s).",
-            ephemeral=True,
-        )
-
+        await interaction.response.defer()
 
     @discord.ui.select(
         cls=discord.ui.RoleSelect,
-        placeholder="Select registration role",
+        placeholder="Select the registration role",
         min_values=1,
         max_values=1,
     )
@@ -789,11 +830,7 @@ class IndependentCloseView(
 
         self.role = select.values[0]
 
-        await interaction.response.send_message(
-            f"✅ Selected role: {self.role.mention}",
-            ephemeral=True,
-        )
-
+        await interaction.response.defer()
 
     @discord.ui.button(
         label="Continue",
@@ -826,31 +863,13 @@ class IndependentCloseView(
 
             return
 
-        try:
-
-            await interaction.response.send_modal(
-                IndependentCloseModal(
-                    self.cog,
-                    self.channels,
-                    self.role,
-                )
+        await interaction.response.send_modal(
+            IndependentCloseModal(
+                self.cog,
+                self.channels,
+                self.role,
             )
-
-        except Exception:
-
-            print(
-                "❌ Could not open "
-                "IndependentCloseModal:"
-            )
-
-            traceback.print_exc()
-
-            if not interaction.response.is_done():
-
-                await interaction.response.send_message(
-                    "❌ Could not open the close form.",
-                    ephemeral=True,
-                )
+        )
 
 
 # =========================================================
@@ -858,7 +877,7 @@ class IndependentCloseView(
 # =========================================================
 
 class IndependentCloseModal(
-    discord.ui.Modal
+    discord.ui.Modal,
 ):
 
     def __init__(
@@ -873,47 +892,30 @@ class IndependentCloseModal(
         )
 
         self.cog = cog
-        self.channels = list(channels)
+        self.channels = channels
         self.role = role
 
-        self.closing_date = discord.ui.TextInput(
-            label="Closing date",
-            placeholder="DD/MM/YYYY",
-            required=True,
-            max_length=10,
-        )
+    closing_date = discord.ui.TextInput(
+        label="Closing date",
+        placeholder="DD/MM/YYYY",
+        required=True,
+        max_length=10,
+    )
 
-        self.closing_time = discord.ui.TextInput(
-            label="Closing time - KSA",
-            placeholder="23:00",
-            required=True,
-            max_length=5,
-        )
+    closing_time = discord.ui.TextInput(
+        label="Closing time - KSA",
+        placeholder="23:00",
+        required=True,
+        max_length=5,
+    )
 
-        self.closing_message = discord.ui.TextInput(
-            label="Closing message",
-            placeholder="Write your closing message here",
-            style=discord.TextStyle.paragraph,
-            required=True,
-            max_length=1800,
-        )
-
-        self.add_item(
-            self.closing_date
-        )
-
-        self.add_item(
-            self.closing_time
-        )
-
-        self.add_item(
-            self.closing_message
-        )
-
-
-    # =====================================================
-    # SUBMIT
-    # =====================================================
+    closing_message = discord.ui.TextInput(
+        label="Closing message",
+        placeholder="Write your closing message here",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1800,
+    )
 
     async def on_submit(
         self,
@@ -939,8 +941,8 @@ class IndependentCloseModal(
 
             await interaction.response.send_message(
                 "❌ Invalid date or time.\n\n"
-                "Date: `DD/MM/YYYY`\n"
-                "Time: `HH:MM`",
+                "Date format: `DD/MM/YYYY`\n"
+                "Time format: `HH:MM`",
                 ephemeral=True,
             )
 
@@ -967,60 +969,47 @@ class IndependentCloseModal(
 
             return
 
-        # -------------------------------------------------
-        # NEXT ID
-        # -------------------------------------------------
-
         closes = load_independent_closes()
 
         next_id = 1
 
         if closes:
 
-            valid_ids = []
+            ids = []
 
             for item in closes:
 
                 try:
-
-                    valid_ids.append(
-                        int(item.get("id", 0))
+                    ids.append(
+                        int(item["id"])
                     )
+                except (
+                    KeyError,
+                    TypeError,
+                    ValueError,
+                ):
+                    continue
 
-                except Exception:
-                    pass
+            if ids:
+                next_id = max(ids) + 1
 
-            if valid_ids:
-                next_id = max(valid_ids) + 1
+        for channel in self.channels:
 
-        # -------------------------------------------------
-        # SAVE
-        # -------------------------------------------------
+            close_data = {
+                "id": next_id,
+                "channel_id": channel.id,
+                "role_id": self.role.id,
+                "guild_id": channel.guild.id,
+                "close_datetime": close_datetime.isoformat(),
+                "message": self.closing_message.value.strip(),
+                "status": "scheduled",
+            }
 
-        close_data = {
-            "id": next_id,
-            "channel_ids": [
-                channel.id
-                for channel in self.channels
-            ],
-            "role_id": self.role.id,
-            "guild_id": self.channels[0].guild.id,
-            "close_datetime": close_datetime.isoformat(),
-            "message": self.closing_message.value.strip(),
-            "status": "scheduled",
-        }
+            closes.append(close_data)
 
-        closes.append(
-            close_data
-        )
+            next_id += 1
 
-        save_independent_closes(
-            closes
-        )
-
-        # -------------------------------------------------
-        # EMBED
-        # -------------------------------------------------
+        save_independent_closes(closes)
 
         channels_text = "\n".join(
             channel.mention
@@ -1057,7 +1046,7 @@ class IndependentCloseModal(
         )
 
         embed.set_footer(
-            text=f"Close ID: {next_id}"
+            text="Multiple channel close scheduled."
         )
 
         await interaction.response.send_message(
@@ -1066,46 +1055,242 @@ class IndependentCloseModal(
         )
 
 
-    # =====================================================
-    # ERROR
-    # =====================================================
+# =========================================================
+# AUTOCLEAR VIEW
+# =========================================================
 
-    async def on_error(
+class AutoClearView(discord.ui.View):
+
+    def __init__(self, cog):
+
+        super().__init__(
+            timeout=300
+        )
+
+        self.cog = cog
+        self.channels = []
+
+    @discord.ui.select(
+        cls=discord.ui.ChannelSelect,
+        channel_types=[discord.ChannelType.text],
+        placeholder="Select channels to auto-clear",
+        min_values=1,
+        max_values=25,
+    )
+    async def channel_select(
         self,
         interaction: discord.Interaction,
-        error: Exception,
+        select: discord.ui.ChannelSelect,
     ):
 
-        print(
-            "❌ IndependentCloseModal ERROR"
+        if not await staff_only(interaction):
+            return
+
+        self.channels = list(
+            select.values
         )
 
-        traceback.print_exception(
-            type(error),
-            error,
-            error.__traceback__,
+        await interaction.response.send_modal(
+            AutoClearModal(
+                self.cog,
+                self.channels,
+            )
         )
+
+
+# =========================================================
+# AUTOCLEAR MODAL
+# =========================================================
+
+class AutoClearModal(
+    discord.ui.Modal,
+):
+
+    def __init__(
+        self,
+        cog,
+        channels,
+    ):
+
+        super().__init__(
+            title="Configure Auto Clear"
+        )
+
+        self.cog = cog
+        self.channels = channels
+
+    interval = discord.ui.TextInput(
+        label="Clear interval in seconds",
+        placeholder="Example: 60",
+        required=True,
+        max_length=6,
+    )
+
+    async def on_submit(
+        self,
+        interaction: discord.Interaction,
+    ):
+
+        if not await staff_only(interaction):
+            return
 
         try:
 
-            if interaction.response.is_done():
+            interval = int(
+                self.interval.value.strip()
+            )
 
-                await interaction.followup.send(
-                    "❌ An error occurred while scheduling "
-                    "the registration close.",
-                    ephemeral=True,
-                )
+        except ValueError:
+
+            await interaction.response.send_message(
+                "❌ Interval must be a number.",
+                ephemeral=True,
+            )
+
+            return
+
+        if interval < 10:
+
+            await interaction.response.send_message(
+                "❌ Minimum interval is 10 seconds.",
+                ephemeral=True,
+            )
+
+            return
+
+        settings = load_autoclear_settings()
+
+        for channel in self.channels:
+
+            existing = None
+
+            for item in settings:
+
+                try:
+
+                    if (
+                        int(item["channel_id"])
+                        == channel.id
+                    ):
+                        existing = item
+                        break
+
+                except (
+                    KeyError,
+                    TypeError,
+                    ValueError,
+                ):
+                    continue
+
+            if existing:
+
+                existing["interval"] = interval
+                existing["status"] = "active"
+                existing["last_clear"] = 0
 
             else:
 
-                await interaction.response.send_message(
-                    "❌ An error occurred while scheduling "
-                    "the registration close.",
-                    ephemeral=True,
+                settings.append(
+                    {
+                        "channel_id": channel.id,
+                        "interval": interval,
+                        "status": "active",
+                        "last_clear": 0,
+                    }
                 )
 
-        except Exception:
-            pass# =========================================================
+        save_autoclear_settings(
+            settings
+        )
+
+        channels_text = "\n".join(
+            channel.mention
+            for channel in self.channels
+        )
+
+        await interaction.response.send_message(
+            "🧹 **AUTO CLEAR ENABLED**\n\n"
+            f"**Channels:**\n{channels_text}\n\n"
+            f"**Interval:** `{interval}` seconds\n\n"
+            "👤 User messages → **DELETE**\n"
+            "🤖 Bot messages → **KEEP**",
+            ephemeral=True,
+        )
+
+
+# =========================================================
+# AUTOCLEAR STOP VIEW
+# =========================================================
+
+class AutoClearStopView(discord.ui.View):
+
+    def __init__(
+        self,
+        cog,
+        channels,
+    ):
+
+        super().__init__(
+            timeout=300
+        )
+
+        self.cog = cog
+        self.channels = channels
+
+    @discord.ui.select(
+        cls=discord.ui.ChannelSelect,
+        channel_types=[discord.ChannelType.text],
+        placeholder="Select channels to stop",
+        min_values=1,
+        max_values=25,
+    )
+    async def channel_select(
+        self,
+        interaction: discord.Interaction,
+        select: discord.ui.ChannelSelect,
+    ):
+
+        if not await staff_only(interaction):
+            return
+
+        selected_ids = {
+            channel.id
+            for channel in select.values
+        }
+
+        settings = load_autoclear_settings()
+
+        stopped = 0
+
+        for item in settings:
+
+            try:
+
+                if int(item["channel_id"]) in selected_ids:
+
+                    if item.get("status") == "active":
+                        item["status"] = "stopped"
+                        stopped += 1
+
+            except (
+                KeyError,
+                TypeError,
+                ValueError,
+            ):
+                continue
+
+        save_autoclear_settings(
+            settings
+        )
+
+        await interaction.response.send_message(
+            f"🛑 Auto Clear stopped in "
+            f"**{stopped} channel(s)**.",
+            ephemeral=True,
+        )
+
+
+# =========================================================
 # REGISTRATION SCHEDULER
 # =========================================================
 
@@ -1113,26 +1298,27 @@ class RegistrationScheduler(
     commands.Cog
 ):
 
-    def __init__(self, bot):
+    def __init__(
+        self,
+        bot,
+    ):
 
         self.bot = bot
 
         self.scheduler_loop.start()
-
+        self.autoclear_loop.start()
 
     def cog_unload(self):
 
         self.scheduler_loop.cancel()
-
+        self.autoclear_loop.cancel()
 
     # =====================================================
     # AUTOMATIC SCHEDULER
     # =====================================================
 
     @tasks.loop(seconds=30)
-    async def scheduler_loop(
-        self
-    ):
+    async def scheduler_loop(self):
 
         if not self.bot.is_ready():
             return
@@ -1163,11 +1349,8 @@ class RegistrationScheduler(
 
             traceback.print_exc()
 
-
     @scheduler_loop.before_loop
-    async def before_scheduler(
-        self
-    ):
+    async def before_scheduler(self):
 
         await self.bot.wait_until_ready()
 
@@ -1175,6 +1358,139 @@ class RegistrationScheduler(
             "🟢 Registration scheduler started."
         )
 
+    # =====================================================
+    # AUTOCLEAR LOOP
+    # =====================================================
+
+    @tasks.loop(seconds=10)
+    async def autoclear_loop(self):
+
+        if not self.bot.is_ready():
+            return
+
+        settings = load_autoclear_settings()
+
+        if not settings:
+            return
+
+        now_timestamp = datetime.now().timestamp()
+
+        changed = False
+
+        for setting in settings:
+
+            if setting.get("status") != "active":
+                continue
+
+            try:
+
+                channel_id = int(
+                    setting["channel_id"]
+                )
+
+                interval = int(
+                    setting["interval"]
+                )
+
+                last_clear = float(
+                    setting.get(
+                        "last_clear",
+                        0,
+                    )
+                )
+
+            except (
+                KeyError,
+                TypeError,
+                ValueError,
+            ):
+
+                continue
+
+            if (
+                now_timestamp - last_clear
+                < interval
+            ):
+                continue
+
+            channel = self.bot.get_channel(
+                channel_id
+            )
+
+            if channel is None:
+                continue
+
+            try:
+
+                deleted = 0
+
+                async for message in channel.history(
+                    limit=100,
+                ):
+
+                    # =================================================
+                    # IMPORTANT:
+                    # NEVER DELETE BOT MESSAGES
+                    # =================================================
+
+                    if message.author.bot:
+                        continue
+
+                    try:
+
+                        await message.delete()
+                        deleted += 1
+
+                    except discord.NotFound:
+                        pass
+
+                    except discord.Forbidden:
+
+                        print(
+                            f"❌ No permission to delete "
+                            f"user messages in "
+                            f"#{channel.name}"
+                        )
+
+                        break
+
+                    except discord.HTTPException:
+                        pass
+
+                setting["last_clear"] = (
+                    now_timestamp
+                )
+
+                changed = True
+
+                print(
+                    f"🧹 AutoClear: deleted "
+                    f"{deleted} user message(s) "
+                    f"in #{channel.name}"
+                )
+
+            except Exception as error:
+
+                print(
+                    f"❌ AutoClear error in "
+                    f"#{channel.name}: "
+                    f"{error!r}"
+                )
+
+        if changed:
+
+            save_autoclear_settings(
+                settings
+            )
+
+    @autoclear_loop.before_loop
+    async def before_autoclear(self):
+
+        await self.bot.wait_until_ready()
+
+        print(
+            "🧹 AutoClear system started."
+        )
 
     # =====================================================
     # GET CHANNELS
@@ -1182,28 +1498,58 @@ class RegistrationScheduler(
 
     async def get_channels(
         self,
-        schedule
+        schedule,
     ):
 
         channels = []
 
-        channel_ids = schedule.get(
+        # IMPORTANT:
+        # sqlite3.Row DOES NOT support .get()
+        channel_ids = row_value(
+            schedule,
             "channel_ids",
-            [],
+            None,
         )
+
+        if channel_ids is None:
+
+            print(
+                "❌ Schedule has no channel_ids."
+            )
+
+            return channels
 
         if isinstance(
             channel_ids,
-            str
+            str,
         ):
+
+            channel_ids = channel_ids.strip()
+
+            if not channel_ids:
+                return channels
 
             try:
 
-                channel_ids = json.loads(
+                decoded = json.loads(
                     channel_ids
                 )
 
-            except Exception:
+                if isinstance(
+                    decoded,
+                    list,
+                ):
+                    channel_ids = decoded
+
+                else:
+                    channel_ids = [
+                        channel_ids
+                    ]
+
+            except (
+                json.JSONDecodeError,
+                TypeError,
+            ):
 
                 channel_ids = [
                     item.strip()
@@ -1211,11 +1557,14 @@ class RegistrationScheduler(
                     if item.strip()
                 ]
 
-        if not isinstance(
+        elif isinstance(
             channel_ids,
-            list
+            int,
         ):
-            return []
+
+            channel_ids = [
+                channel_ids
+            ]
 
         for channel_id in channel_ids:
 
@@ -1225,10 +1574,7 @@ class RegistrationScheduler(
                     int(channel_id)
                 )
 
-                if isinstance(
-                    channel,
-                    discord.TextChannel
-                ):
+                if channel is not None:
 
                     channels.append(
                         channel
@@ -1238,18 +1584,14 @@ class RegistrationScheduler(
                 ValueError,
                 TypeError,
             ):
+
                 continue
 
-        return channels
-
-
-    # =====================================================
+        return channels    # =====================================================
     # PROCESS REGULAR SCHEDULES
     # =====================================================
 
-    async def process_regular_schedules(
-        self
-    ):
+    async def process_regular_schedules(self):
 
         try:
 
@@ -1264,38 +1606,27 @@ class RegistrationScheduler(
 
             return
 
-        if not schedules:
-            return
-
         now = datetime.now(KSA)
 
         for schedule in schedules:
 
             try:
 
-                open_datetime = (
-                    datetime.fromisoformat(
-                        schedule[
-                            "open_datetime"
-                        ]
-                    )
+                schedule_id = row_value(
+                    schedule,
+                    "id",
+                    "?",
                 )
 
-                close_datetime = (
-                    datetime.fromisoformat(
-                        schedule[
-                            "close_datetime"
-                        ]
-                    )
+                open_datetime = datetime.fromisoformat(
+                    schedule["open_datetime"]
                 )
 
-                status = schedule[
-                    "status"
-                ]
+                close_datetime = datetime.fromisoformat(
+                    schedule["close_datetime"]
+                )
 
-                # -------------------------------------------------
-                # OPEN
-                # -------------------------------------------------
+                status = schedule["status"]
 
                 if (
                     status == "scheduled"
@@ -1305,10 +1636,6 @@ class RegistrationScheduler(
                     await self.open_registration(
                         schedule
                     )
-
-                # -------------------------------------------------
-                # CLOSE
-                # -------------------------------------------------
 
                 elif (
                     status == "open"
@@ -1321,14 +1648,22 @@ class RegistrationScheduler(
 
             except Exception as error:
 
+                # IMPORTANT:
+                # No schedule.get() here.
+                # sqlite3.Row does not support .get()
+                schedule_id = row_value(
+                    schedule,
+                    "id",
+                    "?",
+                )
+
                 print(
                     f"❌ Schedule "
-                    f"{schedule.get('id', '?')} "
+                    f"{schedule_id} "
                     f"error: {error!r}"
                 )
 
                 traceback.print_exc()
-
 
     # =====================================================
     # OPEN REGISTRATION
@@ -1336,8 +1671,14 @@ class RegistrationScheduler(
 
     async def open_registration(
         self,
-        schedule
+        schedule,
     ):
+
+        schedule_id = row_value(
+            schedule,
+            "id",
+            "?",
+        )
 
         channels = await self.get_channels(
             schedule
@@ -1346,123 +1687,100 @@ class RegistrationScheduler(
         if not channels:
 
             print(
-                f"❌ Schedule "
-                f"{schedule['id']}: "
+                f"❌ Schedule {schedule_id}: "
                 f"no channels found."
             )
 
             return
 
-        # -------------------------------------------------
-        # ROLE
-        # -------------------------------------------------
+        guild = channels[0].guild
 
         role = None
 
         try:
 
-            role = channels[
-                0
-            ].guild.get_role(
+            role = guild.get_role(
                 int(
-                    schedule[
-                        "role_id"
-                    ]
+                    schedule["role_id"]
                 )
             )
 
-        except Exception:
+        except (
+            KeyError,
+            TypeError,
+            ValueError,
+        ):
 
             role = None
 
         if role is None:
 
             print(
-                f"❌ Schedule "
-                f"{schedule['id']}: "
+                f"❌ Schedule {schedule_id}: "
                 f"registration role not found."
             )
 
             return
 
-        # -------------------------------------------------
-        # OPEN PERMISSIONS
-        # -------------------------------------------------
-
-        successful_channels = []
+        # =================================================
+        # OPEN CHANNEL PERMISSIONS
+        # =================================================
 
         for channel in channels:
 
-            try:
+            await set_registration_permissions(
+                channel,
+                role,
+                can_write=True,
+            )
 
-                await set_registration_permissions(
-                    channel,
-                    role,
-                    opened=True,
-                )
-
-                successful_channels.append(
-                    channel
-                )
-
-            except Exception as error:
-
-                print(
-                    f"❌ Could not open permissions "
-                    f"for schedule "
-                    f"{schedule['id']} "
-                    f"in #{channel.name}: "
-                    f"{error!r}"
-                )
-
-        # -------------------------------------------------
-        # MESSAGE
-        # -------------------------------------------------
+        message = schedule["message"]
 
         message = replace_placeholders(
-            schedule["message"],
+            message,
             role=role,
             name=schedule["name"],
             channels=channels,
         )
 
-        for channel in successful_channels:
+        # =================================================
+        # SEND OPENING MESSAGE
+        # =================================================
+
+        for channel in channels:
 
             try:
 
                 await channel.send(
                     message,
-                    allowed_mentions=(
-                        discord.AllowedMentions(
-                            roles=True
-                        )
+                    allowed_mentions=discord.AllowedMentions(
+                        roles=True,
                     ),
                 )
 
                 print(
                     f"🟢 Registration opened: "
-                    f"{schedule['id']} "
+                    f"{schedule_id} "
                     f"→ #{channel.name}"
                 )
 
             except Exception as error:
 
                 print(
-                    f"❌ Could not send opening message "
-                    f"for schedule "
-                    f"{schedule['id']} "
+                    f"❌ Could not open "
+                    f"schedule {schedule_id} "
                     f"in #{channel.name}: "
                     f"{error!r}"
                 )
 
-        # -------------------------------------------------
-        # STATUS
-        # -------------------------------------------------
+        # =================================================
+        # UPDATE STATUS
+        # =================================================
 
         try:
 
             update_status(
-                schedule["id"],
+                schedule_id,
                 "open",
             )
 
@@ -1470,10 +1788,8 @@ class RegistrationScheduler(
 
             print(
                 f"❌ Could not update schedule "
-                f"{schedule['id']} status: "
-                f"{error!r}"
+                f"{schedule_id}: {error!r}"
             )
-
 
     # =====================================================
     # CLOSE REGISTRATION
@@ -1481,8 +1797,14 @@ class RegistrationScheduler(
 
     async def close_registration(
         self,
-        schedule
+        schedule,
     ):
+
+        schedule_id = row_value(
+            schedule,
+            "id",
+            "?",
+        )
 
         channels = await self.get_channels(
             schedule
@@ -1491,123 +1813,103 @@ class RegistrationScheduler(
         if not channels:
 
             print(
-                f"❌ Schedule "
-                f"{schedule['id']}: "
+                f"❌ Schedule {schedule_id}: "
                 f"no channels found for closing."
             )
 
             return
 
-        # -------------------------------------------------
-        # ROLE
-        # -------------------------------------------------
+        guild = channels[0].guild
 
         role = None
 
         try:
 
-            role = channels[
-                0
-            ].guild.get_role(
+            role = guild.get_role(
                 int(
-                    schedule[
-                        "role_id"
-                    ]
+                    schedule["role_id"]
                 )
             )
 
-        except Exception:
+        except (
+            KeyError,
+            TypeError,
+            ValueError,
+        ):
 
             role = None
 
         if role is None:
 
             print(
-                f"❌ Schedule "
-                f"{schedule['id']}: "
+                f"❌ Schedule {schedule_id}: "
                 f"registration role not found."
             )
 
             return
 
-        # -------------------------------------------------
-        # CLOSE PERMISSIONS
-        # -------------------------------------------------
-
-        successful_channels = []
+        # =================================================
+        # CLOSE CHANNEL PERMISSIONS
+        #
+        # Role can SEE the channel.
+        # Role CANNOT WRITE.
+        # =================================================
 
         for channel in channels:
 
-            try:
+            await set_registration_permissions(
+                channel,
+                role,
+                can_write=False,
+            )
 
-                await set_registration_permissions(
-                    channel,
-                    role,
-                    opened=False,
-                )
-
-                successful_channels.append(
-                    channel
-                )
-
-            except Exception as error:
-
-                print(
-                    f"❌ Could not close permissions "
-                    f"for schedule "
-                    f"{schedule['id']} "
-                    f"in #{channel.name}: "
-                    f"{error!r}"
-                )
-
-        # -------------------------------------------------
-        # CLOSING MESSAGE
-        # -------------------------------------------------
+        message = DEFAULT_CLOSING_MESSAGE
 
         message = replace_placeholders(
-            DEFAULT_CLOSING_MESSAGE,
+            message,
             role=role,
             name=schedule["name"],
             channels=channels,
         )
 
-        for channel in successful_channels:
+        # =================================================
+        # SEND CLOSING MESSAGE
+        # =================================================
+
+        for channel in channels:
 
             try:
 
                 await channel.send(
                     message,
-                    allowed_mentions=(
-                        discord.AllowedMentions(
-                            roles=True
-                        )
+                    allowed_mentions=discord.AllowedMentions(
+                        roles=True,
                     ),
                 )
 
                 print(
                     f"🔴 Registration closed: "
-                    f"{schedule['id']} "
+                    f"{schedule_id} "
                     f"→ #{channel.name}"
                 )
 
             except Exception as error:
 
                 print(
-                    f"❌ Could not send closing message "
-                    f"for schedule "
-                    f"{schedule['id']} "
+                    f"❌ Could not close "
+                    f"schedule {schedule_id} "
                     f"in #{channel.name}: "
                     f"{error!r}"
                 )
 
-        # -------------------------------------------------
-        # STATUS
-        # -------------------------------------------------
+        # =================================================
+        # UPDATE STATUS
+        # =================================================
 
         try:
 
             update_status(
-                schedule["id"],
+                schedule_id,
                 "closed",
             )
 
@@ -1615,17 +1917,16 @@ class RegistrationScheduler(
 
             print(
                 f"❌ Could not update close status "
-                f"for {schedule['id']}: "
+                f"for {schedule_id}: "
                 f"{error!r}"
             )
-
 
     # =====================================================
     # PROCESS INDEPENDENT CLOSES
     # =====================================================
 
     async def process_independent_closes(
-        self
+        self,
     ):
 
         closes = load_independent_closes()
@@ -1639,129 +1940,43 @@ class RegistrationScheduler(
 
         for close_data in closes:
 
-            if (
-                close_data.get(
-                    "status"
-                )
-                != "scheduled"
-            ):
+            if close_data.get(
+                "status"
+            ) != "scheduled":
+
                 continue
 
             try:
 
-                close_datetime = (
-                    datetime.fromisoformat(
-                        close_data[
-                            "close_datetime"
-                        ]
-                    )
+                close_datetime = datetime.fromisoformat(
+                    close_data["close_datetime"]
                 )
 
                 if now < close_datetime:
                     continue
 
-                # -------------------------------------------------
-                # NEW FORMAT
-                # -------------------------------------------------
-
-                channel_ids = (
-                    close_data.get(
-                        "channel_ids"
+                channel = self.bot.get_channel(
+                    int(
+                        close_data["channel_id"]
                     )
                 )
 
-                # -------------------------------------------------
-                # OLD FORMAT SUPPORT
-                # -------------------------------------------------
-
-                if not channel_ids:
-
-                    old_channel_id = (
-                        close_data.get(
-                            "channel_id"
-                        )
-                    )
-
-                    if old_channel_id:
-
-                        channel_ids = [
-                            old_channel_id
-                        ]
-
-                    else:
-
-                        print(
-                            f"❌ Independent close "
-                            f"{close_data.get('id', '?')}: "
-                            f"no channels."
-                        )
-
-                        close_data[
-                            "status"
-                        ] = "error"
-
-                        changed = True
-
-                        continue
-
-                # -------------------------------------------------
-                # GET CHANNELS
-                # -------------------------------------------------
-
-                channels = []
-
-                for channel_id in channel_ids:
-
-                    try:
-
-                        channel = (
-                            self.bot.get_channel(
-                                int(channel_id)
-                            )
-                        )
-
-                        if isinstance(
-                            channel,
-                            discord.TextChannel
-                        ):
-
-                            channels.append(
-                                channel
-                            )
-
-                    except (
-                        ValueError,
-                        TypeError,
-                    ):
-                        continue
-
-                if not channels:
+                if channel is None:
 
                     print(
                         f"❌ Independent close "
-                        f"{close_data['id']}: "
-                        f"no channels found."
+                        f"{close_data.get('id', '?')}: "
+                        f"channel not found."
                     )
 
-                    close_data[
-                        "status"
-                    ] = "error"
-
+                    close_data["status"] = "error"
                     changed = True
 
                     continue
 
-                # -------------------------------------------------
-                # ROLE
-                # -------------------------------------------------
-
-                role = channels[
-                    0
-                ].guild.get_role(
+                role = channel.guild.get_role(
                     int(
-                        close_data[
-                            "role_id"
-                        ]
+                        close_data["role_id"]
                     )
                 )
 
@@ -1769,77 +1984,39 @@ class RegistrationScheduler(
 
                     print(
                         f"❌ Independent close "
-                        f"{close_data['id']}: "
+                        f"{close_data.get('id', '?')}: "
                         f"role not found."
                     )
 
-                    close_data[
-                        "status"
-                    ] = "error"
-
+                    close_data["status"] = "error"
                     changed = True
 
                     continue
 
-                # -------------------------------------------------
-                # CLOSE ALL CHANNELS
-                # -------------------------------------------------
+                # =========================================
+                # CLOSED = VISIBLE + READ ONLY
+                # =========================================
 
-                for channel in channels:
+                await set_registration_permissions(
+                    channel,
+                    role,
+                    can_write=False,
+                )
 
-                    try:
+                await self.close_single_channel(
+                    channel,
+                    role,
+                    close_data["message"],
+                )
 
-                        await set_registration_permissions(
-                            channel,
-                            role,
-                            opened=False,
-                        )
-
-                        message = (
-                            replace_placeholders(
-                                close_data[
-                                    "message"
-                                ],
-                                role=role,
-                                channels=[
-                                    channel
-                                ],
-                            )
-                        )
-
-                        await channel.send(
-                            message,
-                            allowed_mentions=(
-                                discord.AllowedMentions(
-                                    roles=True
-                                )
-                            ),
-                        )
-
-                        print(
-                            f"🔒 Independent close "
-                            f"{close_data['id']} "
-                            f"→ #{channel.name}"
-                        )
-
-                    except Exception as error:
-
-                        print(
-                            f"❌ Could not close "
-                            f"independent channel "
-                            f"#{channel.name}: "
-                            f"{error!r}"
-                        )
-
-                close_data[
-                    "status"
-                ] = "closed"
+                close_data["status"] = "closed"
 
                 changed = True
 
                 print(
                     f"🔒 Independent close "
-                    f"{close_data['id']} completed."
+                    f"{close_data.get('id', '?')} "
+                    f"completed."
                 )
 
             except Exception as error:
@@ -1856,9 +2033,35 @@ class RegistrationScheduler(
 
             save_independent_closes(
                 closes
-            )# =========================================================
-# /schedule
-# =========================================================
+            )
+
+    # =====================================================
+    # CLOSE ONE CHANNEL
+    # =====================================================
+
+    async def close_single_channel(
+        self,
+        channel,
+        role,
+        message,
+    ):
+
+        message = replace_placeholders(
+            message,
+            role=role,
+            channels=[channel],
+        )
+
+        await channel.send(
+            message,
+            allowed_mentions=discord.AllowedMentions(
+                roles=True,
+            ),
+        )
+
+    # =====================================================
+    # /schedule
+    # =====================================================
 
     @app_commands.command(
         name="schedule",
@@ -1875,17 +2078,14 @@ class RegistrationScheduler(
         await interaction.response.send_message(
             "📅 **Create Registration Schedule**\n\n"
             "Select the registration channels "
-            "and the registration role.\n\n"
-            "🔒 Closed: role can see but cannot write.\n"
-            "🟢 Open: role can see and write.",
+            "and the registration role.",
             view=ScheduleView(self),
             ephemeral=True,
         )
 
-
-# =========================================================
-# /close
-# =========================================================
+    # =====================================================
+    # /close
+    # =====================================================
 
     @app_commands.command(
         name="close",
@@ -1901,9 +2101,105 @@ class RegistrationScheduler(
 
         await interaction.response.send_message(
             "🔒 **Schedule Registration Close**\n\n"
-            "Select one or more registration channels "
+            "Select one or multiple channels "
             "and the registration role.",
             view=IndependentCloseView(self),
+            ephemeral=True,
+        )    # =====================================================
+    # /autoclear
+    # =====================================================
+
+    @app_commands.command(
+        name="autoclear",
+        description=(
+            "Automatically delete user messages "
+            "from selected channels."
+        ),
+    )
+    async def autoclear_command(
+        self,
+        interaction: discord.Interaction,
+    ):
+
+        if not await staff_only(interaction):
+            return
+
+        await interaction.response.send_message(
+            "🧹 **AUTO CLEAR SETUP**\n\n"
+            "Select the channels where user messages "
+            "should be automatically deleted.\n\n"
+            "🤖 Bot messages will NEVER be deleted.",
+            view=AutoClearView(self),
+            ephemeral=True,
+        )
+
+    # =====================================================
+    # /autoclear_stop
+    # =====================================================
+
+    @app_commands.command(
+        name="autoclear_stop",
+        description="Stop auto clear in selected channels.",
+    )
+    async def autoclear_stop_command(
+        self,
+        interaction: discord.Interaction,
+    ):
+
+        if not await staff_only(interaction):
+            return
+
+        settings = load_autoclear_settings()
+
+        active_channels = []
+
+        for setting in settings:
+
+            try:
+
+                if setting.get(
+                    "status"
+                ) != "active":
+
+                    continue
+
+                channel = self.bot.get_channel(
+                    int(
+                        setting["channel_id"]
+                    )
+                )
+
+                if channel is not None:
+
+                    active_channels.append(
+                        channel
+                    )
+
+            except (
+                KeyError,
+                TypeError,
+                ValueError,
+            ):
+
+                continue
+
+        if not active_channels:
+
+            await interaction.response.send_message(
+                "ℹ️ No auto-clear channels "
+                "are currently active.",
+                ephemeral=True,
+            )
+
+            return
+
+        await interaction.response.send_message(
+            "🛑 **STOP AUTO CLEAR**\n\n"
+            "Select the channels you want to stop.",
+            view=AutoClearStopView(
+                self,
+                active_channels,
+            ),
             ephemeral=True,
         )
 
