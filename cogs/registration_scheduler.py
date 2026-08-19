@@ -211,7 +211,8 @@ def replace_placeholders(
     return message# =========================================================
 # SCHEDULE VIEW
 # =========================================================
-    class ScheduleView(discord.ui.View):
+
+class ScheduleView(discord.ui.View):
 
     def __init__(self, cog):
         super().__init__(timeout=300)
